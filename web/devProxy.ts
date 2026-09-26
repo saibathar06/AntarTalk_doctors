@@ -1,0 +1,103 @@
+import type { Plugin, ProxyOptions } from "vite";
+
+const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+export function apiTarget(value: string): URL {
+  const target = new URL(value);
+  if (
+    target.username ||
+    target.password ||
+    target.pathname !== "/" ||
+    target.search ||
+    target.hash ||
+    (target.protocol !== "https:" &&
+      !(target.protocol === "http:" && loopbackHosts.has(target.hostname)))
+  ) {
+    throw new Error(
+      "DOCTOR_API_TARGET must be an HTTPS origin or a loopback HTTP origin, without credentials or a path.",
+    );
+  }
+  return target;
+}
+
+export function isLocalRequest(
+  host: string | undefined,
+  origin: string | undefined,
+  address: string | undefined,
+  method: string | undefined,
+): boolean {
+  if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(address ?? ""))
+    return false;
+  try {
+    const local = new URL(`http://${host}`);
+    if (!loopbackHosts.has(local.hostname)) return false;
+    // Never turn a cross-site browser request into a trusted upstream Origin.
+    if (origin) return origin === local.origin;
+    return ["GET", "HEAD", "OPTIONS"].includes(method ?? "");
+  } catch {
+    return false;
+  }
+}
+
+export function localCookie(cookie: string): string {
+  // Only the doctor refresh cookie is adapted for the HTTP loopback development server.
+  // HttpOnly, SameSite=Strict, expiry and Path are retained. Production is untouched.
+  if (!cookie.startsWith("antartalk_doctor_refresh=")) return cookie;
+  return cookie
+    .replace(/;\s*Secure(?=;|$)/gi, "")
+    .replace(/;\s*Domain=[^;]*/gi, "");
+}
+
+export function localApiGuard(): Plugin {
+  return {
+    name: "doctor-loopback-api-guard",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (!(req.url === "/api" || req.url?.startsWith("/api/")))
+          return next();
+        if (
+          !isLocalRequest(
+            req.headers.host,
+            req.headers.origin,
+            req.socket.remoteAddress,
+            req.method,
+          )
+        ) {
+          res.statusCode = 403;
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              success: false,
+              error: {
+                code: "DEV_ORIGIN_DENIED",
+                message: "Use the loopback doctor website on the same origin.",
+              },
+            }),
+          );
+          return;
+        }
+        next();
+      });
+    },
+  };
+}
+
+export function doctorProxy(target: URL): ProxyOptions {
+  return {
+    target: target.origin,
+    changeOrigin: true,
+    secure: true,
+    configure(proxy) {
+      proxy.on("proxyReq", (outgoing, incoming) => {
+        // The preceding guard validates the real browser origin before translation.
+        if (incoming.headers.origin)
+          outgoing.setHeader("Origin", target.origin);
+      });
+      proxy.on("proxyRes", (response) => {
+        if (response.headers["set-cookie"])
+          response.headers["set-cookie"] =
+            response.headers["set-cookie"].map(localCookie);
+      });
+    },
+  };
+}

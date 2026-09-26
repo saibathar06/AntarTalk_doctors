@@ -8,6 +8,8 @@ The new website uses React, Vite, strict TypeScript, DM Sans (self-hosted), Phos
 
 ## Running
 
+**Hosted API update:** the Vite development proxy now defaults to `https://antartalk-doctors.onrender.com`. For a local website with that hosted API, run only `npm run web:dev`; add the Render API's HTTPS origin to its `CORS_ORIGINS`. See the README for current setup. `DOCTOR_API_TARGET` in `web/.env.local` can override the target. The proxy accepts only loopback connections with matching browser origins, translates the validated origin upstream, and removes Secure only from the doctor refresh cookie for local HTTP. Production cookie settings are unchanged. The fully local commands below additionally require `DOCTOR_API_TARGET=http://127.0.0.1:4000` and that upstream origin in the local API CORS allowlist. Local development against Render writes to the hosted database.
+
 From `AntarTalk_doctors`:
 
 ```sh
