@@ -1,6 +1,11 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+const emailFromSchema = z.string().trim().refine((value) => {
+  const mailbox = '[^\\s@<>]+@[^\\s@<>]+\\.[^\\s@<>]+';
+  return new RegExp(`^${mailbox}$`).test(value) || new RegExp(`^[^<>\\r\\n]+<\\s*${mailbox}\\s*>$`).test(value);
+}, 'EMAIL_FROM must be an email address or a display name followed by <email@example.com>.');
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
@@ -33,7 +38,8 @@ const schema = z.object({
   SMTP_SECURE: z.string().default('false').transform((v) => v.trim().toLowerCase() === 'true'),
   SMTP_USER: z.string().trim().min(1).optional(),
   SMTP_PASS: z.string().min(1).optional(),
-  EMAIL_FROM: z.string().email().default('no-reply@antartalk.com')
+  // Nodemailer accepts both `sender@example.com` and `AntarTalk <sender@example.com>`.
+  EMAIL_FROM: emailFromSchema.default('AntarTalk<antartalk.main@gmail.com>')
 });
 
 const parsed = schema.safeParse(process.env);
