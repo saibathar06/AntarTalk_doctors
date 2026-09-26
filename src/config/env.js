@@ -71,12 +71,22 @@ if (env.SESSION_DURATION_MINUTES + env.BUFFER_DURATION_MINUTES !== env.SLOT_INTE
 if (Boolean(env.SMTP_USER) !== Boolean(env.SMTP_PASS)) {
   throw new Error('SMTP_USER and SMTP_PASS must either both be configured or both be omitted.');
 }
-if (env.NODE_ENV === 'production' && (
-  !env.PAYOUT_ENCRYPTION_KEY ||
-  env.CORS_ORIGINS.length === 0 ||
-  env.CORS_ORIGINS.some((origin) => !isAllowedProductionCorsOrigin(origin)) ||
-  [env.JWT_ACCESS_SECRET, env.OTP_PEPPER].some((secret) => secret.startsWith('replace-'))
-)) throw new Error('Production requires encryption, HTTPS public origins (or explicit HTTP loopback origins), and non-placeholder secrets');
-if (env.NODE_ENV === 'production' && (env.SMTP_HOST === 'localhost' || !env.SMTP_USER || !env.SMTP_PASS || !process.env.EMAIL_FROM)) {
-  throw new Error('Production OTP email requires SMTP_HOST, SMTP_USER, SMTP_PASS and EMAIL_FROM.');
+const productionRequirements = {
+  payoutEncryptionKeyPresent: Boolean(env.PAYOUT_ENCRYPTION_KEY),
+  corsOriginsConfigured: env.CORS_ORIGINS.length > 0,
+  corsOriginsValid: env.CORS_ORIGINS.every(isAllowedProductionCorsOrigin),
+  jwtAccessSecretNonPlaceholder: !env.JWT_ACCESS_SECRET.startsWith('replace-'),
+  otpPepperNonPlaceholder: !env.OTP_PEPPER.startsWith('replace-')
+};
+const productionSmtpRequirements = {
+  smtpHostConfigured: env.SMTP_HOST !== 'localhost',
+  smtpUserConfigured: Boolean(env.SMTP_USER),
+  smtpPassConfigured: Boolean(env.SMTP_PASS),
+  emailFromConfigured: Boolean(process.env.EMAIL_FROM)
+};
+if (env.NODE_ENV === 'production') {
+  const failed = Object.entries(productionRequirements).filter(([, valid]) => !valid).map(([name]) => name);
+  if (failed.length) throw new Error(`Production configuration requirements not met: ${failed.join(', ')}.`);
+  const smtpFailed = Object.entries(productionSmtpRequirements).filter(([, valid]) => !valid).map(([name]) => name);
+  if (smtpFailed.length) throw new Error(`Production SMTP configuration requirements not met: ${smtpFailed.join(', ')}.`);
 }
