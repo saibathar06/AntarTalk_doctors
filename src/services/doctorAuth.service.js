@@ -55,9 +55,9 @@ function assertChallengeUser(user, challenge) {
 export async function registerWebsiteDoctor(input, context) {
   try {
     // Shared registration hashes the supplied password with Argon2id before persistence.
-    await registerDoctor({ ...input, firstName: '', lastName: '', professionalStatus: 'LICENSED_PROFESSIONAL' }, context);
+    await registerDoctor({ ...input, professionalStatus: 'LICENSED_PROFESSIONAL' }, context);
   } catch (error) {
-    if (error.code === 'P2002') throw new AppError(409, 'REGISTRATION_CONFLICT', 'An account already uses this email, phone number, or license. Sign in instead, or use Forgot / set password for an earlier account.');
+    if (error.code === 'P2002') throw new AppError(409, 'REGISTRATION_CONFLICT', 'An account already uses this email, phone number, or license. Sign in instead.');
     throw error;
   }
   const user = await passwordStep(input);

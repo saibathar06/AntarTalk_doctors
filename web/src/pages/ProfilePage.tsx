@@ -114,7 +114,7 @@ export function ProfilePage() {
         <DoctorAvatar profile={p!} large />
         <div>
           <h2>Profile photo</h2>
-          <p>A clear, welcoming photo helps clients recognize you.</p>
+          <p>A clear, welcoming photo helps clients recognize you. It is required before you can submit your profile for approval or take sessions.</p>
           <label className="file-label">
             Upload photo
             <input

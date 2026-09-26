@@ -24,7 +24,7 @@ import {
 } from "@phosphor-icons/react";
 import { useAuth } from "./auth";
 import { DoctorAvatar, ErrorState, LoadingState } from "./components";
-import { AuthPage, PasswordRecoveryPage } from "./pages/AuthPages";
+import { AuthPage } from "./pages/AuthPages";
 import {
   AppointmentsPage,
   ClientsPage,
@@ -176,10 +176,6 @@ export function App() {
   return (
     <Routes>
       <Route path="/doctor/login" element={<AuthPage mode="login" />} />
-      <Route
-        path="/doctor/forgot-password"
-        element={<PasswordRecoveryPage />}
-      />
       <Route path="/doctor/register" element={<AuthPage mode="register" />} />
       <Route path="/doctor/verify" element={<AuthPage mode="verify" />} />
       <Route path="/doctor/admin" element={<AdminLayout />} />

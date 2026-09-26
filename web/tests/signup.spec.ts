@@ -30,6 +30,8 @@ for (const scenario of ["success", "gateway", "email"] as const) {
       expect(Object.keys(body).sort()).toEqual([
         "dateOfBirth",
         "email",
+        "firstName",
+        "lastName",
         "licenseNumber",
         "password",
         "phoneNumber",
@@ -71,6 +73,8 @@ for (const scenario of ["success", "gateway", "email"] as const) {
       });
     });
     await page.goto("/doctor/register");
+    await page.getByLabel("First name").fill("Signup");
+    await page.getByLabel("Last name").fill("Tester");
     await page.getByLabel("Email address").fill("signup-test@example.test");
     await page.getByLabel("Password", { exact: true }).fill("TestPassword123!");
     await page.getByLabel("Phone number").fill("+919876543210");
@@ -86,55 +90,14 @@ for (const scenario of ["success", "gateway", "email"] as const) {
           ? "test-gateway-reference"
           : "verification email could not be sent",
       );
-      await page
-        .getByRole("link", { name: "Sign in to verify your email" })
-        .click();
+      await expect(page.getByRole("button", { name: "Create account" })).toBeVisible();
     }
     await expect(
       page.getByLabel(
-        scenario === "success" ? "Verification code" : "Password",
+        scenario === "success" ? "Verification code" : "First name",
         { exact: true },
       ),
     ).toBeVisible();
     expect(registrations).toBe(1);
   });
 }
-
-test("earlier accounts can set a password with a reset code", async ({
-  page,
-}) => {
-  const requests: { path: string; body: unknown }[] = [];
-  await page.route("**/api/**", (route) => {
-    const path = new URL(route.request().url()).pathname;
-    if (path.endsWith("/refresh"))
-      return route.fulfill({
-        status: 401,
-        json: { success: false, error: { message: "Sign in" } },
-      });
-    requests.push({ path, body: route.request().postDataJSON() });
-    return route.fulfill({ json: { success: true, data: {} } });
-  });
-  await page.goto("/doctor/forgot-password");
-  await page.getByLabel("Email address").fill("existing@example.test");
-  await page
-    .getByRole("button", { name: "Request password-reset code" })
-    .click();
-  await page.getByLabel("Reset code").fill("123456");
-  await page.getByLabel("New password").fill("UpdatedPassword123!");
-  await page.getByRole("button", { name: "Save new password" }).click();
-  await expect(page.getByRole("status")).toContainText("Password saved.");
-  expect(requests).toEqual([
-    {
-      path: "/api/auth/forgot-password",
-      body: { email: "existing@example.test" },
-    },
-    {
-      path: "/api/auth/reset-password",
-      body: {
-        email: "existing@example.test",
-        otp: "123456",
-        newPassword: "UpdatedPassword123!",
-      },
-    },
-  ]);
-});

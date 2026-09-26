@@ -5,7 +5,7 @@ import {
   HeartbeatIcon,
   ShieldCheckIcon,
 } from "@phosphor-icons/react";
-import { ApiError, mutate } from "../api";
+import { mutate } from "../api";
 import { useAuth, type PasswordChallenge } from "../auth";
 import { ErrorState } from "../components";
 
@@ -77,11 +77,9 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
-    [cooldown, setCooldown] = useState(0),
-    [recoveryEmail, setRecoveryEmail] = useState("");
+    [cooldown, setCooldown] = useState(0);
   useEffect(() => {
     setError("");
-    setRecoveryEmail("");
     setNotice(mode === "verify" ? (challenge?.message ?? "") : "");
     setCooldown(mode === "verify" ? (challenge?.retryAfterSeconds ?? 0) : 0);
   }, [mode, challenge]);
@@ -131,12 +129,6 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
       }
     } catch (e) {
       setError((e as Error).message);
-      if (
-        mode === "register" &&
-        e instanceof ApiError &&
-        [0, 409, 500, 502, 503, 504].includes(e.status)
-      )
-        setRecoveryEmail(String(values.email).trim().toLowerCase());
     } finally {
       setBusy(false);
     }
@@ -182,19 +174,6 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
           {notice}
         </p>
       )}
-      {recoveryEmail && (
-        <p className="alert">
-          Your account may already exist.{" "}
-          <Link to="/doctor/login" state={{ email: recoveryEmail }}>
-            Sign in to verify your email
-          </Link>
-          . For an account created before passwords were added, use{" "}
-          <Link to="/doctor/forgot-password" state={{ email: recoveryEmail }}>
-            Forgot / set password
-          </Link>
-          . Do not register again.
-        </p>
-      )}
       {mode === "verify" && !challenge ? (
         <Link className="button" to="/doctor/login">
           Enter email and password to continue
@@ -230,18 +209,32 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
               </label>
             </>
           )}
-          {mode === "login" && (
-            <p className="help">
-              <Link to="/doctor/forgot-password">Forgot / set password</Link> —
-              use this for earlier passwordless accounts.
-            </p>
-          )}
           {mode === "register" && (
             <>
               <p className="help">
                 Use 10–128 characters with uppercase, lowercase and a number.
                 Passwords are stored only as Argon2id hashes.
               </p>
+              <div className="form-grid">
+                <label>
+                  First name
+                  <input
+                    name="firstName"
+                    autoComplete="given-name"
+                    maxLength={100}
+                    required
+                  />
+                </label>
+                <label>
+                  Last name
+                  <input
+                    name="lastName"
+                    autoComplete="family-name"
+                    maxLength={100}
+                    required
+                  />
+                </label>
+              </div>
               <label>
                 Phone number
                 <input
@@ -330,129 +323,6 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
         ) : (
           <Link to="/doctor/login">Back to sign in</Link>
         )}
-      </p>
-    </AuthShell>
-  );
-}
-
-export function PasswordRecoveryPage() {
-  const location = useLocation();
-  const [email, setEmail] = useState(
-    (location.state as { email?: string } | null)?.email ?? "",
-  );
-  const [requested, setRequested] = useState(false),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [notice, setNotice] = useState(""),
-    [done, setDone] = useState(false);
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    setBusy(true);
-    setError("");
-    try {
-      if (!requested) {
-        await mutate("/api/auth/forgot-password", "POST", { email });
-        setRequested(true);
-        setNotice(
-          "Password-reset request received. Check your registered inbox and spam folder for the reset code. For security, this page does not disclose whether an account exists.",
-        );
-      } else {
-        const values = Object.fromEntries(new FormData(form));
-        await mutate("/api/auth/reset-password", "POST", {
-          email,
-          otp: values.otp,
-          newPassword: values.newPassword,
-        });
-        form.reset();
-        setDone(true);
-        setNotice(
-          "Password saved. Sign in with your email and new password, then complete email OTP verification.",
-        );
-      }
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <AuthShell
-      title="Set a secure password."
-      description="Reset a forgotten password, or set one for an earlier passwordless account. Existing bookings and profile data stay unchanged."
-    >
-      <ErrorState message={error} />
-      {notice && (
-        <p className="alert" role="status">
-          {notice}
-        </p>
-      )}
-      {!done && (
-        <form onSubmit={submit}>
-          <label>
-            Email address
-            <input
-              type="email"
-              required
-              value={email}
-              readOnly={requested}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="username"
-            />
-          </label>
-          {requested && (
-            <>
-              <label>
-                Reset code
-                <input
-                  name="otp"
-                  required
-                  inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  autoComplete="one-time-code"
-                />
-              </label>
-              <label>
-                New password
-                <input
-                  name="newPassword"
-                  required
-                  type="password"
-                  minLength={10}
-                  maxLength={128}
-                  autoComplete="new-password"
-                />
-              </label>
-              <p className="help">
-                At least 10 characters with uppercase, lowercase and a number.
-              </p>
-            </>
-          )}
-          <button className="button full" disabled={busy}>
-            {busy
-              ? "Please wait…"
-              : requested
-                ? "Save new password"
-                : "Request password-reset code"}
-          </button>
-        </form>
-      )}
-      {requested && !done && (
-        <button
-          className="text-button"
-          onClick={() => {
-            setRequested(false);
-            setNotice("");
-          }}
-        >
-          Request another reset code
-        </button>
-      )}
-      <p className="auth-switch">
-        <Link to="/doctor/login" state={{ email }}>
-          Back to sign in
-        </Link>
       </p>
     </AuthShell>
   );

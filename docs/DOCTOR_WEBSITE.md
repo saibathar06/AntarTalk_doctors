@@ -58,7 +58,7 @@ All paths below start `/api/doctor/auth`. All require an allowed `Origin`; missi
 
 | Method / path | Body | Result |
 | --- | --- | --- |
-| POST /register | `email`, `password`, `phoneNumber` (E.164), `dateOfBirth` (YYYY-MM-DD, adult), `licenseNumber`, `professionalCategory`, optional `timezone` | 201 password-step challenge (below); creates PENDING, incomplete, not-accepting doctor and sends verification email |
+| POST /register | `firstName`, `lastName`, `email`, `password`, `phoneNumber` (E.164), `dateOfBirth` (YYYY-MM-DD, adult), `licenseNumber`, `professionalCategory`, optional `timezone` | 201 password-step challenge (below); creates PENDING, incomplete, not-accepting doctor and sends verification email |
 | POST /login | `email`, `password` | 200 password-step challenge; no access/refresh tokens until OTP succeeds |
 | POST /send-otp | `challengeToken` | 200 `{status, message, retryAfterSeconds, otpExpiresInSeconds}`; reports OTP_SENT or OTP_COOLDOWN |
 | POST /verify-otp | `challengeToken`, six-digit `otp` | 200 `{accessToken, expiresIn}`; sets refresh cookie; VERIFY_EMAIL also verifies email |
@@ -69,9 +69,9 @@ Login uses email, not phone. All codes go to registered email; no claim of SMS/p
 
 Passwords require 10–128 characters with uppercase, lowercase and a digit, and are stored only as Argon2id hashes. Password-step responses contain `{challengeToken, email, purpose, status, message, retryAfterSeconds, otpExpiresInSeconds}`. Purpose is chosen by the server: VERIFY_EMAIL for unverified email, otherwise DOCTOR_LOGIN. The proof expires after 15 minutes, is not an access token, and is kept only in React memory. Reloading verification requires entering credentials again. OTP_SENT means SMTP accepted the send, not guaranteed inbox delivery; OTP_COOLDOWN does not claim a new email was sent and has null otpExpiresInSeconds. Email delivery failures return 503 EMAIL_DELIVERY_UNAVAILABLE.
 
-Earlier passwordless accounts must use `/doctor/forgot-password`: POST `/api/auth/forgot-password` with `{email}`, then POST `/api/auth/reset-password` with `{email, otp, newPassword}`. Reset revokes existing sessions; sign in again with password and OTP. Recovery requests remain non-enumerating. No database migration is needed for this authentication change. Deploy backend and website together. **Compatibility change:** shared POST `/api/auth/login` now returns the password-step challenge for DOCTOR accounts too, preventing a password-only bypass; CLIENT/ADMIN flows are unchanged. Existing sessions expire/revoke normally.
+No database migration is needed for the registration-name fields. Deploy backend and website together. **Compatibility change:** shared POST `/api/auth/login` returns the password-step challenge for DOCTOR accounts too, preventing a password-only bypass; CLIENT/ADMIN flows are unchanged. Existing sessions expire/revoke normally.
 
-Relevant errors: 422 VALIDATION_ERROR, 409 REGISTRATION_CONFLICT for duplicate website registration, 400 INVALID_OTP/OTP_EXPIRED, 429 OTP_ATTEMPTS_EXCEEDED/RATE_LIMITED, 401 INVALID_CREDENTIALS/AUTH_CHALLENGE_EXPIRED/INVALID_REFRESH_TOKEN/REFRESH_TOKEN_REUSE/SESSION_REVOKED. If registration's SMTP delivery fails after commit, sign in with the submitted password to request verification again; do not register again. Use password recovery for older passwordless accounts.
+Relevant errors: 422 VALIDATION_ERROR, 409 REGISTRATION_CONFLICT for duplicate website registration, 400 INVALID_OTP/OTP_EXPIRED, 429 OTP_ATTEMPTS_EXCEEDED/RATE_LIMITED, 401 INVALID_CREDENTIALS/AUTH_CHALLENGE_EXPIRED/INVALID_REFRESH_TOKEN/REFRESH_TOKEN_REUSE/SESSION_REVOKED. If registration's SMTP delivery fails after commit, sign in with the submitted password to request verification again; do not create a second account.
 
 ### Profile and uploads
 

@@ -27,7 +27,7 @@ Optional local PostgreSQL/Redis: `docker compose up -d`. SMTP must be configured
 
 ## How it works
 
-- Signup and login require email + password, followed by an email OTP. Passwords use Argon2id hashes. Earlier passwordless accounts must use **Forgot / set password**. Deploy the backend and website together for this updated contract.
+- Signup collects first name, last name, email, password and core professional details. Login requires email + password, followed by an email OTP. Passwords use Argon2id hashes. Deploy the backend and website together for this updated contract.
 - The same login accepts DOCTOR and ADMIN accounts. Doctors open their workspace; administrators open the small verification-review queue. CLIENT accounts cannot use this app.
 - A complete doctor profile is explicitly submitted for review. Admins can approve or reject it with an audit trail; approval keeps bookings disabled until the doctor opts in.
 - Account verification, profile completion, professional approval and accepting bookings are separate gates. Existing professionals must complete new profile fields before new bookings/join access.
