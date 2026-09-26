@@ -11,6 +11,8 @@ The development proxy now targets `https://antartalk-doctors.onrender.com`. No l
 
 The loopback-only development proxy validates local browser origins before translating them to the upstream origin. It adapts only the refresh cookie for local HTTP, retaining HttpOnly/SameSite/Path. Production Secure cookies and backend origin checks are unchanged. To override the API target, set `DOCTOR_API_TARGET` in `web/.env.local`; do not put backend secrets there. Requests from this website affect the hosted database.
 
+Signup troubleshooting: the UI now displays a request reference for HTTP failures and offers email verification when registration's outcome is uncertain; it never automatically retries registration. `X-AntarTalk-Gateway` distinguishes `local-proxy` connection errors from `upstream-response`. SMTP failures return `503 EMAIL_DELIVERY_UNAVAILABLE` after deploying the backend changes. `SMTP_TIMEOUT_MS` defaults to 15000 for SMTP connection/greeting/socket inactivity. These changes do not replace valid Brevo credentials or confirm email delivery.
+
 ## Fully local backend (optional)
 
 Run from **AntarTalk_doctors**, not its parent folder:

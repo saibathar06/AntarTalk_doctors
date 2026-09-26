@@ -5,7 +5,7 @@ import {
   HeartbeatIcon,
   ShieldCheckIcon,
 } from "@phosphor-icons/react";
-import { mutate } from "../api";
+import { ApiError, mutate } from "../api";
 import { useAuth } from "../auth";
 import { ErrorState } from "../components";
 
@@ -17,6 +17,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [cooldown, setCooldown] = useState(0);
+  const [recoveryEmail, setRecoveryEmail] = useState("");
   const challenge = location.state as {
     identifier?: string;
     purpose?: string;
@@ -24,6 +25,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
   useEffect(() => {
     setError("");
     setNotice("");
+    setRecoveryEmail("");
   }, [mode]);
   useEffect(() => {
     if (cooldown > 0) {
@@ -68,6 +70,12 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
       }
     } catch (e) {
       setError((e as Error).message);
+      if (
+        mode === "register" &&
+        e instanceof ApiError &&
+        [0, 409, 500, 502, 503, 504].includes(e.status)
+      )
+        setRecoveryEmail(String(values.email).trim().toLowerCase());
     } finally {
       setBusy(false);
     }
@@ -140,6 +148,19 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
                 : "A secure code is all you need to sign in."}
           </p>
           <ErrorState message={error || auth.error} />
+          {recoveryEmail && (
+            <p className="alert">
+              Your account may already exist.{" "}
+              <Link
+                to="/doctor/verify"
+                state={{ identifier: recoveryEmail, purpose: "VERIFY_EMAIL" }}
+              >
+                Continue to email verification
+              </Link>{" "}
+              to enter a code or request a new one. This does not submit
+              registration again.
+            </p>
+          )}
           {notice && (
             <p role="status" className="alert">
               {notice}

@@ -138,6 +138,8 @@ Today/month counts include CONFIRMED, COMPLETED and NO_SHOW by start date in the
 
 ## Checks and operational limits
 
+Signup reliability update: 132 backend tests and 18 browser tests passed, including the real form payload checked against the shared registration Zod schema, HTML gateway errors, email failures and verification recovery without duplicate registration. Live localhost probes reached Render (401 on unauthenticated refresh, 422 on deliberately empty registration); no real account was created or email sent. SMTP timeout/error handling changes require redeployment of the Render backend; credentials remain provider-managed. Local proxy failures now return structured JSON with a request reference, and received upstream responses are marked separately in `X-AntarTalk-Gateway`. No automatic signup retries were added.
+
 ```sh
 npm test
 npm run lint

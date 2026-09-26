@@ -1,4 +1,6 @@
 import type { Plugin, ProxyOptions } from "vite";
+import { randomUUID } from "node:crypto";
+import { ServerResponse } from "node:http";
 
 const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 export function apiTarget(value: string): URL {
@@ -76,6 +78,9 @@ export function localApiGuard(): Plugin {
           );
           return;
         }
+        // Correlate local gateway failures with Render logs without logging PII.
+        req.headers["x-request-id"] = randomUUID();
+        res.setHeader("X-Request-Id", req.headers["x-request-id"]);
         next();
       });
     },
@@ -87,13 +92,46 @@ export function doctorProxy(target: URL): ProxyOptions {
     target: target.origin,
     changeOrigin: true,
     secure: true,
+    proxyTimeout: 120000,
     configure(proxy) {
+      proxy.on("error", (error, request, response) => {
+        const requestId = request.headers["x-request-id"];
+        console.error(
+          JSON.stringify({
+            event: "doctor_proxy_connection_failed",
+            requestId,
+            errorCode: (error as NodeJS.ErrnoException).code,
+            method: request.method,
+          }),
+        );
+        if (
+          !(response instanceof ServerResponse) ||
+          response.headersSent ||
+          response.writableEnded
+        )
+          return;
+        response.writeHead(502, {
+          "Content-Type": "application/json",
+          "X-AntarTalk-Gateway": "local-proxy",
+        });
+        response.end(
+          JSON.stringify({
+            success: false,
+            error: {
+              code: "API_CONNECTION_FAILED",
+              message:
+                "The local website could not get a response from the hosted API. Registration may have completed; check email verification before submitting again.",
+            },
+          }),
+        );
+      });
       proxy.on("proxyReq", (outgoing, incoming) => {
         // The preceding guard validates the real browser origin before translation.
         if (incoming.headers.origin)
           outgoing.setHeader("Origin", target.origin);
       });
       proxy.on("proxyRes", (response) => {
+        response.headers["x-antartalk-gateway"] = "upstream-response";
         if (response.headers["set-cookie"])
           response.headers["set-cookie"] =
             response.headers["set-cookie"].map(localCookie);

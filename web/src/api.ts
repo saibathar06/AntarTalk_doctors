@@ -1,12 +1,22 @@
+import { ApiError } from "./requestError";
+import { responseError } from "./httpError";
+export { ApiError } from "./requestError";
 let accessToken: string | null = null;
 let refreshPromise: Promise<void> | null = null;
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    public code: string,
-    message: string,
-  ) {
-    super(message);
+async function fetchApi(path: string, options: RequestInit): Promise<Response> {
+  try {
+    return await fetch(path, {
+      ...options,
+      signal: options.signal ?? AbortSignal.timeout(125000),
+    });
+  } catch (error) {
+    throw new ApiError(
+      0,
+      "API_CONNECTION_FAILED",
+      (error as Error).name === "TimeoutError"
+        ? "The hosted API took too long to respond. Registration may have completed; check email verification before submitting again."
+        : "The API connection was interrupted. Check your connection and use email verification before repeating registration.",
+    );
   }
 }
 export const setAccessToken = (token: string | null) => {
@@ -14,21 +24,17 @@ export const setAccessToken = (token: string | null) => {
 };
 export async function refreshSession() {
   const rotate = async () => {
-    const response = await fetch("/api/doctor/auth/refresh", {
+    const response = await fetchApi("/api/doctor/auth/refresh", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: "{}",
     });
-    const payload = await response.json();
     if (!response.ok) {
       accessToken = null;
-      throw new ApiError(
-        response.status,
-        payload.error?.code,
-        payload.error?.message ?? "Please sign in again.",
-      );
+      throw await responseError(response);
     }
+    const payload = await response.json();
     accessToken = payload.data.accessToken;
   };
   // Serialize cookie rotation across tabs as well as callers in this tab.
@@ -51,7 +57,7 @@ async function request(
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
   if (options.body && !(options.body instanceof FormData))
     headers.set("Content-Type", "application/json");
-  const response = await fetch(path, {
+  const response = await fetchApi(path, {
     ...options,
     headers,
     credentials: "same-origin",
@@ -66,22 +72,7 @@ async function request(
     return request(path, options, false);
   }
   if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    const details = payload?.error?.details?.fieldErrors;
-    const validationMessages = details
-      ? Object.values(details)
-          .flat()
-          .filter((value) => typeof value === "string")
-          .slice(0, 4)
-          .join(" ")
-      : "";
-    throw new ApiError(
-      response.status,
-      payload?.error?.code ?? "REQUEST_FAILED",
-      validationMessages ||
-        payload?.error?.message ||
-        "Unable to connect. Please retry.",
-    );
+    throw await responseError(response);
   }
   return response;
 }

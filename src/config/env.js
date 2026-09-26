@@ -24,6 +24,7 @@ const schema = z.object({
   CORS_ORIGINS: z.string().default('http://localhost:5173,http://localhost:4000,http://localhost:3000,http://localhost:8081'),
   LOG_LEVEL: z.string().default('info'),
   SMTP_HOST: z.string().default('localhost'),
+  SMTP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).default(15000),
   SMTP_PORT: z.coerce.number().int().positive().default(1025),
   SMTP_SECURE: z.string().default('false').transform((v) => v === 'true'),
   SMTP_USER: z.string().optional(),
