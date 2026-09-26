@@ -15,8 +15,8 @@ export const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, store: 
 export const otpLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 8, store: store('rl:otp:'), standardHeaders: 'draft-8', legacyHeaders: false, message: response });
 export const accountAuthLimiter = rateLimit({
   windowMs: 15 * 60000, limit: 20, store: store('rl:account:'),
-  keyGenerator: (req) => sha256(String(req.body?.email ?? req.body?.refreshToken ?? '').trim().toLowerCase()),
-  skip: (req) => !req.body?.email && !req.body?.refreshToken,
+  keyGenerator: (req) => sha256(String(req.body?.email ?? req.body?.identifier ?? req.body?.refreshToken ?? '').trim().toLowerCase()),
+  skip: (req) => !req.body?.email && !req.body?.identifier && !req.body?.refreshToken,
   standardHeaders: 'draft-8', legacyHeaders: false, message: response
 });
 export const sensitiveLimiter = rateLimit({

@@ -9,7 +9,7 @@ const transport = nodemailer.createTransport({
 });
 
 export async function sendOtpEmail({ email, code, purpose }) {
-  const label = purpose === 'VERIFY_EMAIL' ? 'verify your AntarTalk account' : 'reset your AntarTalk password';
+  const label = purpose === 'DOCTOR_LOGIN' ? 'sign in to AntarTalk Professionals' : purpose === 'VERIFY_EMAIL' ? 'verify your AntarTalk account' : 'reset your AntarTalk password';
   await transport.sendMail({
     from: env.EMAIL_FROM,
     to: email,

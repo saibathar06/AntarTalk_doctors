@@ -7,6 +7,7 @@ export function notFound(req, _res, next) {
 }
 
 export function errorHandler(error, req, res, _next) {
+  if (error.name === 'MulterError') error = new AppError(422, 'INVALID_UPLOAD', 'Upload one file, at most 5 MB, in the file field.');
   if (error.type === 'entity.parse.failed') error = new AppError(400, 'INVALID_JSON', 'Malformed JSON request.');
   if (error.type === 'entity.too.large') error = new AppError(413, 'PAYLOAD_TOO_LARGE', 'Request body exceeds the allowed size.');
   if (error.code === 'P2034') error = new AppError(409, 'RETRY_REQUIRED', 'Concurrent update. Retry with the same idempotency key.');

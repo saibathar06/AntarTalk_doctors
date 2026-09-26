@@ -4,4 +4,7 @@ coverage/
 dist/
 *.log
 .DS_Store
-.env.example
+uploads/
+web/test-results/
+web/playwright-report/
+*.tsbuildinfo

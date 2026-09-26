@@ -1,0 +1,404 @@
+@media (min-width: 1600px) {
+  .main-content {
+    padding-top: 50px;
+  }
+  .auth-story {
+    padding: 60px 100px;
+  }
+  .auth-story h1 {
+    font-size: 52px;
+  }
+}
+@media (max-width: 1200px) {
+  .sidebar {
+    width: 205px;
+    padding: 28px 15px;
+  }
+  .workspace-body {
+    margin-left: 205px;
+  }
+  .main-content {
+    padding: 30px 24px;
+  }
+  .topbar {
+    padding: 0 24px;
+  }
+  .stats {
+    gap: 12px;
+  }
+  .stat {
+    padding: 18px;
+  }
+  .appointment {
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .join-action {
+    margin-left: auto;
+  }
+  .appointment-person {
+    min-width: 220px;
+  }
+  .completion {
+    gap: 14px;
+  }
+  .completion-icon {
+    display: none;
+  }
+  .auth-story {
+    padding: 40px;
+  }
+  .auth-story h1 {
+    font-size: 36px;
+  }
+  .client-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .time-window {
+    flex-wrap: wrap;
+  }
+  .section-title > label {
+    max-width: 240px;
+  }
+}
+@media (max-width: 950px) {
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dashboard-bottom {
+    grid-template-columns: 1fr;
+  }
+  .page-heading {
+    align-items: flex-start;
+  }
+  .page-heading h1 {
+    font-size: 28px;
+  }
+  .completion {
+    flex-wrap: wrap;
+  }
+  .completion .button {
+    margin-left: auto;
+  }
+  .day-row {
+    gap: 12px;
+  }
+  .day-row > strong {
+    width: 72px;
+  }
+  .time-window input[type="time"] {
+    width: 115px;
+  }
+  .auth-story h1 {
+    font-size: 32px;
+  }
+  .auth-form-panel {
+    padding: 40px 28px;
+  }
+  .auth-story {
+    padding: 35px 25px;
+  }
+  .story-art {
+    transform: scale(0.85);
+    transform-origin: left center;
+  }
+  .toolbar {
+    flex-wrap: wrap;
+  }
+  .profile-form .form-grid {
+    gap: 0 15px;
+  }
+}
+@media (max-width: 760px) {
+  .sidebar {
+    transform: translateX(-100%);
+    width: 245px;
+    transition: transform 0.2s;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .workspace-body {
+    margin-left: 0;
+  }
+  .menu-button {
+    display: inline-flex;
+  }
+  .mobile-close {
+    display: inline-flex;
+    position: absolute;
+    right: 15px;
+    top: 85px;
+  }
+  .nav-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: #202b3e66;
+    z-index: 25;
+    border: 0;
+  }
+  .topbar {
+    height: 70px;
+    padding: 0 20px;
+    gap: 12px;
+  }
+  .breadcrumb {
+    margin-right: auto;
+  }
+  .breadcrumb > span {
+    padding: 0 5px;
+  }
+  .topbar-right {
+    gap: 12px;
+  }
+  .profile-chip > span:last-child,
+  .practice-indicator {
+    display: none;
+  }
+  .main-content {
+    padding: 28px 20px;
+  }
+  .workspace-footer {
+    padding: 20px;
+    font-size: 9px;
+  }
+  .auth-page {
+    grid-template-columns: 1fr;
+  }
+  .auth-story {
+    min-height: 0;
+    padding: 24px 30px;
+  }
+  .auth-story > div,
+  .story-foot {
+    display: none;
+  }
+  .auth-form-panel {
+    padding: 45px 25px;
+  }
+  .auth-form {
+    max-width: 430px;
+  }
+  .page-heading {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .page-heading .button {
+    margin-top: 0;
+  }
+  .card {
+    padding: 22px;
+  }
+  .photo-section {
+    gap: 18px;
+  }
+  .client-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .day-row {
+    align-items: flex-start;
+  }
+  .day-row > strong {
+    padding-top: 10px;
+  }
+  .time-window {
+    gap: 8px;
+  }
+  .section-title {
+    flex-wrap: wrap;
+  }
+  .section-title > label {
+    max-width: none;
+    width: 100%;
+  }
+  .form-footer {
+    flex-wrap: wrap;
+  }
+  .appointment-person {
+    min-width: 190px;
+  }
+  .join-action {
+    max-width: 100%;
+  }
+  .appointment {
+    padding: 20px 0;
+  }
+  .appointment .badge {
+    margin-left: 0;
+  }
+  .time-column {
+    min-width: 84px;
+  }
+  .empty {
+    padding: 35px 10px;
+  }
+}
+@media (max-width: 480px) {
+  h1 {
+    font-size: 27px;
+  }
+  .main-content {
+    padding: 25px 15px;
+  }
+  .topbar {
+    padding: 0 15px;
+  }
+  .breadcrumb {
+    font-size: 10px;
+  }
+  .card {
+    padding: 19px;
+    border-radius: 13px;
+  }
+  .stats {
+    gap: 10px;
+  }
+  .stat {
+    padding: 17px;
+  }
+  .stat strong {
+    font-size: 29px;
+  }
+  .stat > div {
+    align-items: flex-start;
+  }
+  .stat span {
+    font-size: 11px;
+  }
+  .stat svg {
+    width: 18px;
+    flex-shrink: 0;
+  }
+  .stat p {
+    font-size: 9px;
+  }
+  .completion {
+    padding: 20px;
+  }
+  .completion .button {
+    width: 100%;
+  }
+  .completion h2 {
+    font-size: 16px;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .profile-form .form-grid {
+    gap: 0;
+  }
+  .profile-form h2 {
+    font-size: 17px;
+  }
+  .photo-section {
+    align-items: flex-start;
+  }
+  .avatar.large {
+    width: 60px;
+    height: 60px;
+  }
+  .file-label input {
+    max-width: 180px;
+  }
+  .day-row {
+    flex-wrap: wrap;
+    position: relative;
+    padding-top: 20px;
+  }
+  .day-row > strong {
+    width: 100%;
+    padding: 0;
+  }
+  .day-row > .icon-button {
+    position: absolute;
+    top: 12px;
+    right: 0;
+  }
+  .day-windows {
+    width: 100%;
+    margin-top: 5px;
+  }
+  .time-window input[type="time"] {
+    width: 105px;
+  }
+  .time-window small {
+    font-size: 10px;
+  }
+  .toolbar {
+    gap: 12px;
+  }
+  .tabs {
+    gap: 2px;
+  }
+  .tabs button {
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+  .appointment {
+    gap: 12px;
+  }
+  .appointment-person {
+    flex: 1;
+  }
+  .appointment-person .client-avatar {
+    display: none;
+  }
+  .appointment h3 {
+    font-size: 13px;
+  }
+  .appointment small {
+    font-size: 9px;
+  }
+  .join-action {
+    margin-left: auto;
+  }
+  .join-action .button {
+    font-size: 11px;
+  }
+  .pager {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .pager span {
+    width: 100%;
+    margin-bottom: 5px;
+  }
+  .client-grid {
+    grid-template-columns: 1fr;
+  }
+  .workspace-footer {
+    flex-direction: column;
+    gap: 5px;
+  }
+  .status-list > div {
+    font-size: 11px;
+  }
+  .auth-form-panel {
+    padding: 35px 22px;
+  }
+  .auth-form h1 {
+    font-size: 29px;
+  }
+  .auth-story {
+    padding: 23px;
+  }
+  .photo-section .file-label {
+    max-width: 210px;
+  }
+  .form-footer .button {
+    width: 100%;
+  }
+  .otp-input {
+    letter-spacing: 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

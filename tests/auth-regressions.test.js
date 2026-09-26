@@ -6,6 +6,7 @@ import { hashOtp } from '../src/utils/crypto.js';
 import { verifyEmail, resetPassword, resendOtp, logout, rotateRefreshToken, login } from '../src/services/auth.service.js';
 import { sendOtpEmail } from '../src/lib/mailer.js';
 import argon2 from 'argon2';
+import { sendDoctorOtp, verifyDoctorOtp } from '../src/services/doctorAuth.service.js';
 
 let user;
 let challenge;
@@ -33,6 +34,30 @@ beforeEach(() => {
   sendOtpEmail.mockClear();
 });
 describe('OTP and session regressions', () => {
+  it('website login uses doctor-scoped phone lookup and email delivery', async () => {
+    user.emailVerifiedAt = new Date();
+    prisma.user.findFirst = vi.fn(async () => user);
+    challenge.lastSentAt = new Date(0);
+    await sendDoctorOtp({ identifier: '+919876543210', purpose: 'DOCTOR_LOGIN' });
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({ where: { role: 'DOCTOR', accountStatus: 'ACTIVE', doctorProfile: { phoneNumber: '+919876543210' } } });
+    expect(sendOtpEmail).toHaveBeenCalledWith(expect.objectContaining({ email: user.email, purpose: 'DOCTOR_LOGIN' }));
+  });
+  it('website login preserves failed-attempt limits and consumes the code once', async () => {
+    user.emailVerifiedAt = new Date(); user.role = 'DOCTOR';
+    prisma.user.findFirst = vi.fn(async () => user);
+    challenge.otpHash = hashOtp(user.id, 'DOCTOR_LOGIN', '123456');
+    await expect(verifyDoctorOtp({ identifier: user.email, purpose: 'DOCTOR_LOGIN', otp: '000000' })).rejects.toMatchObject({ code: 'INVALID_OTP' });
+    expect(challenge.attempts).toBe(1);
+    const tokens = await verifyDoctorOtp({ identifier: user.email, purpose: 'DOCTOR_LOGIN', otp: '123456' });
+    expect(tokens.accessToken).toBeTruthy();
+    await expect(verifyDoctorOtp({ identifier: user.email, purpose: 'DOCTOR_LOGIN', otp: '123456' })).rejects.toMatchObject({ code: 'OTP_EXPIRED' });
+  });
+  it('website verification marks email verified without granting professional privileges', async () => {
+    user.role = 'DOCTOR'; prisma.user.findFirst = vi.fn(async () => user);
+    await verifyDoctorOtp({ identifier: user.email, purpose: 'VERIFY_EMAIL', otp: '123456' });
+    expect(user.emailVerifiedAt).toBeInstanceOf(Date);
+    expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: user.id }, data: { emailVerifiedAt: expect.any(Date) } });
+  });
   it('commits failed attempts and rejects the sixth verification', async () => {
     for (let i = 0; i < 5; i++) await expect(verifyEmail({ email: user.email, otp: '000000' })).rejects.toMatchObject({ code: 'INVALID_OTP' });
     expect(challenge.attempts).toBe(5);

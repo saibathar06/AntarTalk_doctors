@@ -4,6 +4,7 @@ import { z } from 'zod';
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(4000),
+  UPLOAD_DIR: z.string().default('./uploads'),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1),
   JWT_ACCESS_SECRET: z.string().min(32),
@@ -20,7 +21,7 @@ const schema = z.object({
   SESSION_DURATION_MINUTES: z.coerce.number().int().positive().default(40),
   BUFFER_DURATION_MINUTES: z.coerce.number().int().nonnegative().default(20),
   SLOT_INTERVAL_MINUTES: z.coerce.number().int().positive().default(60),
-  CORS_ORIGINS: z.string().default('http://localhost:3000,http://localhost:8081'),
+  CORS_ORIGINS: z.string().default('http://localhost:5173,http://localhost:4000,http://localhost:3000,http://localhost:8081'),
   LOG_LEVEL: z.string().default('info'),
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: z.coerce.number().int().positive().default(1025),

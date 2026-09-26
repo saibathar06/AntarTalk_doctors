@@ -17,6 +17,14 @@ export const updateProfileSchema = z.object({ body: z.object({
   enrollmentNumber: z.string().trim().min(2).max(100).nullable().optional(),
   timezone: z.string().min(1).max(64).optional(),
   bio: z.string().trim().max(2000).nullable().optional(),
+  qualification: z.string().trim().min(2).max(200).nullable().optional(),
+  institution: z.string().trim().min(2).max(200).nullable().optional(),
+  graduationYear: z.number().int().min(1900).max(2200).nullable().optional(),
+  experienceYears: z.number().int().min(0).max(80).nullable().optional(),
+  languages: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
+  expertise: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
+  consultationFee: amount.nullable().optional(),
+  emailNotifications: z.boolean().optional(),
   isAcceptingBookings: z.boolean().optional()
   ,email: email.optional(),
   currentPassword: z.string().min(1).max(128).optional()

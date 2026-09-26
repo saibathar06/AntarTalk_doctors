@@ -40,6 +40,7 @@ enum VerificationStatus {
 enum OtpPurpose {
   VERIFY_EMAIL
   RESET_PASSWORD
+  DOCTOR_LOGIN
 }
 
 enum BookingStatus {
@@ -115,6 +116,16 @@ model DoctorProfile {
   enrollmentNumber         String?              @db.VarChar(100)
   timezone                 String               @default("UTC") @db.VarChar(64)
   bio                      String?              @db.VarChar(2000)
+  profileImageUrl           String?              @db.VarChar(300)
+  licenseDocumentUrl        String?              @db.VarChar(300)
+  qualification            String?              @db.VarChar(200)
+  institution              String?              @db.VarChar(200)
+  graduationYear           Int?
+  experienceYears          Int?
+  languages                String[]             @default([])
+  expertise                String[]             @default([])
+  consultationFee          Decimal?             @db.Decimal(12, 2)
+  emailNotifications       Boolean              @default(true)
   isAcceptingBookings      Boolean              @default(false)
   createdAt                DateTime             @default(now()) @db.Timestamptz(3)
   updatedAt                DateTime             @updatedAt @db.Timestamptz(3)

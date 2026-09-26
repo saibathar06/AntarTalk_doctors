@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath, URL } from 'node:url';
 import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
@@ -15,6 +17,7 @@ import { adminRouter } from './routes/admin.routes.js';
 import { authRouter } from './routes/auth.routes.js';
 import { bookingRouter } from './routes/booking.routes.js';
 import { doctorRouter } from './routes/doctor.routes.js';
+import { doctorAuthRouter } from './routes/doctorAuth.routes.js';
 import { asyncHandler } from './utils/asyncHandler.js';
 
 export const app = express();
@@ -31,7 +34,7 @@ app.use(pinoHttp({ logger, genReqId: (req) => req.id, serializers: {
   res: (res) => ({ statusCode: res.statusCode }),
   err: (err) => ({ type: err.type, code: err.code })
 } }));
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: { directives: { imgSrc: ["'self'", 'data:', 'blob:'] } } }));
 app.use(cors({
   origin(origin, callback) {
     if (!origin || env.CORS_ORIGINS.includes(origin)) return callback(null, true);
@@ -52,11 +55,16 @@ app.get('/health/ready', asyncHandler(async (_req, res) => {
 app.use(apiLimiter);
 
 app.use('/api/auth', authRouter);
+app.use('/api/doctor/auth', doctorAuthRouter);
 app.use('/api/doctor', doctorRouter);
 app.use('/api/bookings', bookingRouter);
 // Singular alias preserves the requested POST /api/booking/confirm contract.
 app.use('/api/booking', bookingRouter);
 app.use('/api/admin', adminRouter);
+
+const webRoot = fileURLToPath(new URL('../web/dist/', import.meta.url));
+app.use('/assets', express.static(path.join(webRoot, 'assets'), { immutable: true, maxAge: '1y' }));
+app.get(['/doctor', '/doctor/{*route}'], (_req, res, next) => res.sendFile(path.join(webRoot, 'index.html'), (error) => { if (error) next(error); }));
 
 app.use(notFound);
 app.use(errorHandler);

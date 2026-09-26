@@ -1,44 +1,41 @@
-# AntarTalk Doctor Backend
+# AntarTalk Professionals
 
-One shared Express API serves the Doctor Mobile App, Doctor Website, and Client App/Web. PostgreSQL owns permanent records; Redis holds 180-second reservations and distributed rate-limit counters. Runtime JavaScript is checked by TypeScript checkJs.
+Responsive doctor website (`web/`, React + Vite + TypeScript) backed by the existing shared Express API (`src/`, JavaScript/checkJs), Prisma/PostgreSQL and Redis. No separate booking system or mobile app was added.
 
-## Run locally
+## Start locally
 
-1. Copy `.env.example` to `.env` and replace all secrets.
-2. Start infrastructure: `docker compose up -d`.
-3. Install and prepare: `npm install && npm run db:generate && npm run db:migrate`.
-4. Start the API: `npm run dev` (default: `http://localhost:4000`).
+Run from **AntarTalk_doctors**, not its parent folder:
 
-Configure SMTP for OTP delivery. Set PAYOUT_ENCRYPTION_KEY to 32 random bytes encoded as 64 hex characters for payout-account storage. No payment, payout, or video provider is connected. A trusted payment integration must supply a successful priced order bound to the client, doctor, exact UTC window, amount, currency, and doctor earning; unbound legacy payments are rejected. Payout requests remain PENDING until a trusted worker processes them. Join tokens are internal authorization, not video-provider meeting URLs.
+1. Merge `.env.example` into `.env`, preserving your database URL. Configure Redis, strong JWT/OTP secrets and SMTP. Never commit credentials.
+2. Install: `npm ci` and `npm --prefix web ci`.
+3. Prepare database: `npm run db:generate` and `npm run db:migrate`. Migrations are additive; do not reset shared data.
+4. Start API: `npm run dev`. In another terminal: `npm run web:dev`.
+5. Open **http://localhost:5173/doctor/login**. Include this exact origin in `CORS_ORIGINS`.
 
-## Main APIs
+Optional local PostgreSQL/Redis: `docker compose up -d`. SMTP must be configured separately.
 
-- `/api/auth/*` — registration, OTP, login, refresh rotation, logout, password reset
-- `/api/doctor/me` — professional profile; credential edits return verification to `PENDING`
-- `/api/doctor/availability`, `/blocked-slots` — weekly hours and exceptions
-- `/api/bookings/availability`, `/reserve`, `/confirm` — dynamic slots and conflict-safe booking
-- `/api/doctor/sessions/*` — upcoming/past/all sessions, GET /:id details, POST /:id/join authorization
-- `/api/doctor/earnings`, `/payouts`, `/payout-accounts` — ledger-derived balances and idempotent withdrawals
-- `/api/admin/doctors/:id/verification` — admin-only verification state changes
+## How it works
 
-Use `Idempotency-Key` for booking confirmation and payout withdrawal. Appointment duration, buffer, interval, and reservation TTL are environment settings. All appointment timestamps are stored in UTC; weekly working hours retain the doctor's IANA timezone.
+- Email OTP signup/login; phone can identify an account, but codes are **email-only**. Existing password APIs remain supported.
+- Account verification, profile completion, professional approval and accepting bookings are separate gates. Existing professionals must complete new profile fields before new bookings/join access.
+- Dashboard, schedule, appointments, clients, profile, uploads, availability, settings and earnings use real APIs. No production demo data.
+- PostgreSQL owns bookings and financial records; Redis owns temporary 180-second holds. Shared exclusion constraints prevent conflicting bookings.
+- Default window: **40 minutes therapy + 20 minutes protected buffer = one 60-minute booking**. Configurable via environment.
+- Appointment timestamps are UTC; recurring hours use the doctor's IANA timezone. Overnight `23:00–03:00` ends the next day.
+- Access JWTs stay in memory; rotating refresh tokens use an HttpOnly cookie. All doctor APIs enforce authentication and ownership.
 
-## Checks
+## Build and verify
 
-Run `npm run db:validate`, `npm test`, `npm run lint`, and `npm run typecheck`. PostgreSQL constraints prevent overlapping active doctor AND client bookings.
+`npm test`, `npm run lint`, `npm run typecheck`, `npm run db:validate`.
 
-PUT working hours replaces all windows; an empty array clears them. Input and output use HH:mm, interpreted in the doctor's IANA timezone. Overnight 23:00–03:00 ends the following day. Invalid or ambiguous DST boundaries are skipped. Actual bookings/blocks use UTC; display appointments in the doctor's timezone.
+Website: `npm --prefix web run lint`, `npm run web:build`, `npm run web:test`. Install the browser first with `npm --prefix web exec -- playwright install chromium`. Browser tests use isolated API fixtures; four backend infrastructure tests require disposable PostgreSQL/Redis URLs.
 
-Default appointment model: 60 minutes = 40 therapy + 20 protected buffer, one booking. Session plus buffer must equal interval. Join access starts JOIN_EARLY_MINUTES (default 10) before therapy and ends strictly at therapy end; JWTs expire at that cutoff.
+Production: `npm run web:build`, then `npm start`. Express serves `/doctor/*` and the API under one HTTPS origin. Configure persistent private `UPLOAD_DIR` storage, production secrets and explicit trusted proxy settings.
 
-DELETE /api/doctor/account rejects any PENDING/CONFIRMED booking with endTime > now, including in-progress appointments. It revokes access, disables availability and anonymizes PII while retaining financial history.
+## Boundaries
 
-Canonical booking routes are /api/bookings/*; identically secured singular /api/booking/* aliases remain. Doctor clients must check the shared login response role before entering the app. Each doctor endpoint independently enforces the role.
+No real video/payment/payout provider, ratings, SMS or appointment-notification worker is connected. Join returns backend authorization, not a video meeting URL. Financial records are retained on account deletion; unresolved active bookings prevent deletion. New uploads are private and ownership-checked.
 
-Production requires HTTPS CORS origins, strong secrets, and payout encryption. TRUST_PROXY is empty by default; set only explicit trusted proxy addresses/CIDRs. Health endpoints: /health/live and /health/ready.
+See [website handoff](docs/DOCTOR_WEBSITE.md) for routes, API contracts, environment variables, migration details, changed files and rollout assumptions. Existing backend details: [API changes](docs/API_CHANGES.md), [hardening report](docs/HARDENING_REPORT.md).
 
-The additive hardening migration uses NOT VALID for new checks that may conflict with legacy data; audit existing rows before validating those constraints. Drain old API instances and let existing Redis holds expire when deploying the changed reservation key. Encrypt or re-enroll legacy plaintext payout tokens before enabling a provider worker.
-
-Four infrastructure tests require a disposable migrated PostgreSQL database and dedicated Redis database supplied through INTEGRATION_DATABASE_URL and INTEGRATION_REDIS_URL. Otherwise they are explicitly skipped.
-
-See [API changes](docs/API_CHANGES.md) and [hardening report](docs/HARDENING_REPORT.md), including the remaining Redis/PostgreSQL commit limit and provider boundaries.
+**Security:** `.env.example` was sanitized. Rotate any credentials previously stored there; prior Git history was not rewritten.

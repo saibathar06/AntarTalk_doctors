@@ -43,7 +43,7 @@ export async function createOtp(user, purpose) {
  * @param {import('@prisma/client').OtpPurpose} purpose
  * @param {string} otp
  * @param {import('@prisma/client').Prisma.TransactionClient} tx */
-async function consumeOtp(userId, purpose, otp, tx = prisma) {
+export async function consumeOtp(userId, purpose, otp, tx = prisma) {
   const challenge = await tx.otpChallenge.findFirst({
     where: { userId, purpose, consumedAt: null },
     orderBy: { createdAt: 'desc' }
@@ -59,7 +59,7 @@ async function consumeOtp(userId, purpose, otp, tx = prisma) {
   await tx.otpChallenge.update({ where: { id: challenge.id }, data: { consumedAt: new Date() } });
 }
 
-async function issueTokens(user, familyId = crypto.randomUUID()) {
+export async function issueTokens(user, familyId = crypto.randomUUID()) {
   const refreshToken = randomToken();
   await prisma.$transaction(async (tx) => {
     const fresh = await lockUser(tx, user.id);

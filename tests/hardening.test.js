@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Prisma } from '@prisma/client';
 vi.mock('../src/lib/prisma.js', () => ({ prisma: {
-  booking: { findFirst: vi.fn() }
+  booking: { findFirst: vi.fn() },
+  doctorProfile: { findUnique: vi.fn() }
 } }));
 import { prisma } from '../src/lib/prisma.js';
 import { joinExpiry, getSession, createJoinAccess } from '../src/services/session.service.js';
@@ -15,8 +16,21 @@ import jwt from 'jsonwebtoken';
 
 const start = new Date('2030-01-01T14:00:00Z');
 const booking = { id: 'booking', startTime: start, endTime: new Date('2030-01-01T15:00:00Z'), sessionDurationMinutes: 40, status: 'CONFIRMED', earning: null };
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  prisma.doctorProfile.findUnique.mockResolvedValue({
+    firstName: 'Test', lastName: 'Professional', profileImageUrl: '/photo',
+    professionalCategory: 'PSYCHOLOGIST', professionalStatus: 'LICENSED_PROFESSIONAL',
+    experienceYears: 0, qualification: 'MSc', licenseNumber: 'TEST', bio: 'Test bio',
+    languages: ['English'], expertise: ['Anxiety'], verificationStatus: 'VERIFIED',
+    isAcceptingBookings: true, user: { role: 'DOCTOR', accountStatus: 'ACTIVE', emailVerifiedAt: start }
+  });
+});
 describe('therapy authorization boundaries', () => {
+  it('rejects join when professional eligibility was revoked', async () => {
+    prisma.doctorProfile.findUnique.mockResolvedValue(null);
+    await expect(createJoinAccess('doctor', 'booking')).rejects.toMatchObject({ code: 'DOCTOR_NOT_ELIGIBLE' });
+  });
   it.each([-11, 40, 45, 60, 61])('rejects minute %s', (offset) => {
     expect(() => joinExpiry(booking, +start + offset * 60000)).toThrow();
   });

@@ -16,6 +16,9 @@ export const doctorProfileSelect = {
   enrollmentNumber: true,
   timezone: true,
   bio: true,
+  profileImageUrl: true, licenseDocumentUrl: true, qualification: true,
+  institution: true, graduationYear: true, experienceYears: true,
+  languages: true, expertise: true, consultationFee: true, emailNotifications: true,
   isAcceptingBookings: true,
   createdAt: true,
   updatedAt: true

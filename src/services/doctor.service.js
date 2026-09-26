@@ -8,10 +8,12 @@ import { recordAudit } from './audit.service.js';
 import { createOtp } from './auth.service.js';
 import { lockUser, lockDoctor, serialTransaction } from './transaction.service.js';
 import { profileData } from '../utils/profileInput.js';
+import { profileCompletion, canDoctorTakeSessions } from './eligibility.service.js';
+import { removeStoredUpload } from './upload.service.js';
 
 const credentialFields = new Set([
   'professionalCategory', 'professionalStatus', 'licenseNumber', 'licenseAuthority',
-  'university', 'course', 'specialization', 'expectedGraduationDate', 'enrollmentNumber'
+  'university', 'course', 'specialization', 'expectedGraduationDate', 'enrollmentNumber', 'qualification', 'institution', 'graduationYear'
 ]);
 
 function validateCredentials(profile) {
@@ -27,9 +29,9 @@ function validateCredentials(profile) {
 }
 
 export async function getProfile(userId) {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, doctorProfile: { select: doctorProfileSelect } } });
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, email: true, emailVerifiedAt: true, accountStatus: true, doctorProfile: { select: doctorProfileSelect } } });
   if (!user?.doctorProfile) throw new AppError(404, 'DOCTOR_NOT_FOUND', 'Doctor profile not found.');
-  return { ...user.doctorProfile, email: user.email };
+  return { ...user.doctorProfile, email: user.email, ...profileCompletion(user.doctorProfile), canTakeSessions: canDoctorTakeSessions(user.doctorProfile, user) };
 }
 
 export async function updateProfile(userId, input, context = {}) {
@@ -37,6 +39,7 @@ export async function updateProfile(userId, input, context = {}) {
   if (profileInput.timezone) assertTimezone(profileInput.timezone);
   const current = await getProfile(userId);
   const merged = { ...current, ...profileInput };
+  if (profileInput.isAcceptingBookings && !profileCompletion(merged).profileCompleted) throw new AppError(403, 'PROFILE_INCOMPLETE', 'Complete your professional profile before accepting bookings.');
   validateCredentials(merged);
   const credentialsChanged = Object.keys(profileInput).some((key) => credentialFields.has(key) && String(profileInput[key]) !== String(current[key]));
   if (profileInput.isAcceptingBookings && (credentialsChanged || current.verificationStatus !== 'VERIFIED')) {
@@ -55,6 +58,7 @@ export async function updateProfile(userId, input, context = {}) {
   const data = {
     ...profileData(profileInput),
     ...(typeof profileInput.isAcceptingBookings === 'boolean' ? { isAcceptingBookings: profileInput.isAcceptingBookings } : {}),
+    ...(!profileCompletion(merged).profileCompleted ? { isAcceptingBookings: false } : {}),
     ...(credentialsChanged ? { verificationStatus: 'PENDING', isAcceptingBookings: false } : {})
   };
   const updated = await serialTransaction(async (tx) => {
@@ -75,12 +79,12 @@ export async function updateProfile(userId, input, context = {}) {
     return profile;
   });
   if (emailChanged) await createOtp(updatedUser, 'VERIFY_EMAIL');
-  return { ...updated, ...(emailChanged ? { isAcceptingBookings: false } : {}), email: emailChanged ? email : current.email, reVerificationRequired: credentialsChanged, emailVerificationRequired: emailChanged };
+  return { ...updated, ...await getProfile(userId), reVerificationRequired: credentialsChanged, emailVerificationRequired: emailChanged };
 }
 
 export async function deleteAccount(userId, context = {}) {
   const now = new Date();
-  const profile = await prisma.doctorProfile.findUnique({ where: { userId }, select: { id: true } });
+  const profile = await prisma.doctorProfile.findUnique({ where: { userId }, select: { id: true, profileImageUrl: true, licenseDocumentUrl: true } });
   if (!profile) throw new AppError(404, 'DOCTOR_NOT_FOUND', 'Doctor profile not found.');
   await serialTransaction(async (tx) => {
     await lockUser(tx, userId);
@@ -96,6 +100,8 @@ export async function deleteAccount(userId, context = {}) {
         dateOfBirth: new Date('1970-01-01T00:00:00Z'), expectedGraduationDate: null,
         licenseNumber: null, licenseAuthority: null, university: null, course: null,
         specialization: null, enrollmentNumber: null, bio: null, isAcceptingBookings: false,
+        profileImageUrl: null, licenseDocumentUrl: null, qualification: null, institution: null,
+        graduationYear: null, experienceYears: null, languages: [], expertise: [], consultationFee: null,
         verificationStatus: 'SUSPENDED'
       }
     });
@@ -107,4 +113,5 @@ export async function deleteAccount(userId, context = {}) {
     await tx.doctorBlockedSlot.updateMany({ where: { doctorId: profile.id }, data: { reason: null } });
     await recordAudit({ actorId: userId, action: 'ACCOUNT_ANONYMIZED', entityType: 'User', entityId: userId, ipAddress: context.ip }, tx);
   });
+  await Promise.all([profile.profileImageUrl, profile.licenseDocumentUrl].filter(Boolean).map((url) => removeStoredUpload(userId, url)));
 }

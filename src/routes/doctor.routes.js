@@ -13,9 +13,27 @@ import {
 import { z } from 'zod';
 import { uuid } from '../validation/common.js';
 import { sensitiveLimiter } from '../middleware/rateLimits.js';
+import multer from 'multer';
+import * as workspace from '../services/doctorWorkspace.service.js';
+import { saveUpload, readUpload } from '../services/upload.service.js';
+import { pagination } from '../validation/common.js';
 
 export const doctorRouter = Router();
 doctorRouter.use(authenticateUser, requireDoctor, sensitiveLimiter);
+doctorRouter.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 0 } });
+doctorRouter.get('/profile', asyncHandler(async (req, res) => res.json({ success: true, data: await doctor.getProfile(req.user.id) })));
+doctorRouter.patch('/profile', validate(updateProfileSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await doctor.updateProfile(req.user.id, req.body, { ip: req.ip }) })));
+doctorRouter.post('/profile/photo', upload.single('file'), asyncHandler(async (req, res) => res.status(201).json({ success: true, data: await saveUpload(req.user.id, req.user.doctorProfile.id, req.file) })));
+doctorRouter.post('/profile/documents', upload.single('file'), asyncHandler(async (req, res) => res.status(201).json({ success: true, data: await saveUpload(req.user.id, req.user.doctorProfile.id, req.file, true) })));
+doctorRouter.get('/files/:filename', validate(z.object({ params: z.object({ filename: z.string().regex(/^[a-f0-9-]{36}\.(jpg|pdf)$/) }) })), asyncHandler(async (req, res) => {
+  const file = await readUpload(req.user.id, req.params.filename);
+  res.set('Content-Security-Policy', "default-src 'none'; sandbox");
+  res.sendFile(file, { dotfiles: 'deny', headers: { 'Content-Disposition': req.params.filename.endsWith('.pdf') ? 'attachment' : 'inline' } }, (error) => { if (error && !res.headersSent) res.status(404).json({ success: false, error: { code: 'FILE_NOT_FOUND', message: 'File not found.' } }); });
+}));
+doctorRouter.get('/dashboard', asyncHandler(async (req, res) => res.json({ success: true, data: await workspace.dashboard(req.user.doctorProfile.id) })));
+doctorRouter.get('/appointments', validate(z.object({ query: z.object({ ...pagination, filter: z.enum(['upcoming', 'today', 'past', 'completed', 'cancelled']).default('upcoming'), date: z.string().date().optional() }) })), asyncHandler(async (req, res) => res.json({ success: true, data: await workspace.appointments(req.user.doctorProfile.id, req.query) })));
+doctorRouter.get('/clients', validate(payoutListSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await workspace.clients(req.user.doctorProfile.id, req.query) })));
 
 doctorRouter.get('/me', asyncHandler(async (req, res) => res.json({ success: true, data: await doctor.getProfile(req.user.id) })));
 doctorRouter.patch('/me', validate(updateProfileSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await doctor.updateProfile(req.user.id, req.body, { ip: req.ip }) })));

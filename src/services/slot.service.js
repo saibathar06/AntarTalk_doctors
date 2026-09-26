@@ -4,6 +4,8 @@ import { AppError } from '../errors/AppError.js';
 import { prisma } from '../lib/prisma.js';
 import { redis } from '../lib/redis.js';
 import { localDateRange, timeParts } from '../utils/time.js';
+import { doctorProfileSelect } from '../utils/serializers.js';
+import { canDoctorTakeSessions } from './eligibility.service.js';
 
 export const reservationKey = (doctorId, startTime) =>
   `reservation:doctor:${doctorId}:slot:${startTime.toISOString()}`;
@@ -97,12 +99,14 @@ export async function getAvailableSlots(
   const profile = await db.doctorProfile.findUnique({
     where: { id: doctorId },
     select: {
+      ...doctorProfileSelect,
       id: true,
       timezone: true,
       verificationStatus: true,
       isAcceptingBookings: true,
       user: {
         select: {
+          role: true,
           accountStatus: true,
           emailVerifiedAt: true,
         },
@@ -114,11 +118,7 @@ export async function getAvailableSlots(
   });
 
   if (
-    !profile ||
-    profile.verificationStatus !== 'VERIFIED' ||
-    !profile.isAcceptingBookings ||
-    profile.user.accountStatus !== 'ACTIVE' ||
-    !profile.user.emailVerifiedAt
+    !canDoctorTakeSessions(profile)
   ) {
     throw new AppError(
       404,
