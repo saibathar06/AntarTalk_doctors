@@ -5,7 +5,7 @@ export const redis = new Redis(env.REDIS_URL, {
   maxRetriesPerRequest: 2,
   enableReadyCheck: true,
   lazyConnect: true
-  ,commandTimeout: 1000
+  ,commandTimeout: 5000
 });
 
 redis.on('error', () => {
