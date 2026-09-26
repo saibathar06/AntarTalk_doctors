@@ -4,6 +4,7 @@ import { env } from '../config/env.js';
 import { AppError } from '../errors/AppError.js';
 import { prisma } from '../lib/prisma.js';
 import { sendOtpEmail } from '../lib/mailer.js';
+import { logger } from '../lib/logger.js';
 import { hashOtp, randomOtp, randomToken, safeEqual, sha256 } from '../utils/crypto.js';
 import { signAccessToken } from '../utils/tokens.js';
 import { serializeUser, doctorProfileSelect } from '../utils/serializers.js';
@@ -33,9 +34,22 @@ export async function createOtp(user, purpose) {
       lastSentAt: now
     }
   });
-    return { sent: true, reason: 'SENT', retryAfterSeconds: env.OTP_RESEND_COOLDOWN_SECONDS, challengeId: challenge.id };
+    return {
+      sent: true,
+      reason: 'SENT',
+      retryAfterSeconds: env.OTP_RESEND_COOLDOWN_SECONDS,
+      challengeId: challenge.id,
+      challengeCreatedAt: challenge.createdAt,
+      expiresAt: challenge.expiresAt
+    };
   });
   if (!created.sent) return created;
+  logger.info({
+    otpChallengeId: created.challengeId,
+    purpose,
+    challengeCreatedAt: created.challengeCreatedAt?.toISOString(),
+    expiresAt: created.expiresAt?.toISOString()
+  }, 'OTP challenge persisted');
   try {
     await sendOtpEmail({ email: user.email, code, purpose });
   } catch (error) {
@@ -58,11 +72,33 @@ export async function consumeOtp(userId, purpose, otp, tx = prisma) {
     where: { userId, purpose, consumedAt: null },
     orderBy: { createdAt: 'desc' }
   });
-  if (!challenge || challenge.expiresAt <= new Date()) throw new AppError(400, 'OTP_EXPIRED', 'The verification code is invalid or expired.');
-  if (challenge.attempts >= env.OTP_MAX_ATTEMPTS) throw new AppError(429, 'OTP_ATTEMPTS_EXCEEDED', 'Too many verification attempts. Request a new code.');
+  const now = new Date();
+  if (!challenge) {
+    logger.info({ purpose, challengeFound: false, validationBranch: 'CHALLENGE_NOT_FOUND' }, 'OTP verification evaluated');
+    throw new AppError(400, 'OTP_EXPIRED', 'The verification code is invalid or expired.');
+  }
+  const diagnostic = {
+    otpChallengeId: challenge.id,
+    purpose,
+    challengeFound: true,
+    attempts: challenge.attempts,
+    challengeCreatedAt: challenge.createdAt?.toISOString(),
+    expiresAt: challenge.expiresAt.toISOString(),
+    serverTime: now.toISOString()
+  };
+  if (challenge.expiresAt <= now) {
+    logger.info({ ...diagnostic, validationBranch: 'CHALLENGE_EXPIRED' }, 'OTP verification evaluated');
+    throw new AppError(400, 'OTP_EXPIRED', 'The verification code is invalid or expired.');
+  }
+  if (challenge.attempts >= env.OTP_MAX_ATTEMPTS) {
+    logger.info({ ...diagnostic, validationBranch: 'ATTEMPT_LIMIT' }, 'OTP verification evaluated');
+    throw new AppError(429, 'OTP_ATTEMPTS_EXCEEDED', 'Too many verification attempts. Request a new code.');
+  }
 
   const expected = hashOtp(userId, purpose, otp);
-  if (!safeEqual(expected, challenge.otpHash)) {
+  const otpComparisonMatched = safeEqual(expected, challenge.otpHash);
+  logger.info({ ...diagnostic, otpComparisonMatched, validationBranch: otpComparisonMatched ? 'MATCHED' : 'MISMATCHED' }, 'OTP verification evaluated');
+  if (!otpComparisonMatched) {
     await tx.otpChallenge.update({ where: { id: challenge.id }, data: { attempts: { increment: 1 } } });
     return new AppError(400, 'INVALID_OTP', 'The verification code is invalid or expired.');
   }

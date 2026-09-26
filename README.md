@@ -6,7 +6,7 @@ Responsive doctor website (`web/`, React + Vite + TypeScript) backed by the exis
 
 The development proxy now targets `https://antartalk-doctors.onrender.com`. No local API or Redis is needed for this mode.
 
-1. In the Render backend's Environment settings, add `https://antartalk-doctors.onrender.com` to `CORS_ORIGINS` (preserve other allowed HTTPS origins), then redeploy.
+1. In the Render backend's Environment settings, add `https://antartalk-doctors.onrender.com` to `CORS_ORIGINS` (preserve other allowed HTTPS origins), then redeploy. For direct local-browser API calls, explicit loopback origins such as `http://127.0.0.1:5173` and `http://localhost:5173` are also allowed in production; arbitrary HTTP origins remain rejected.
 2. Run `npm run web:dev` from `AntarTalk_doctors` and open `http://127.0.0.1:5173/doctor/login`.
 
 The loopback-only development proxy validates local browser origins before translating them to the upstream origin. It adapts only the refresh cookie for local HTTP, retaining HttpOnly/SameSite/Path. Production Secure cookies and backend origin checks are unchanged. To override the API target, set `DOCTOR_API_TARGET` in `web/.env.local`; do not put backend secrets there. Requests from this website affect the hosted database.

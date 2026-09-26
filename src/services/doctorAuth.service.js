@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { prisma } from '../lib/prisma.js';
+import { logger } from '../lib/logger.js';
 import { AppError } from '../errors/AppError.js';
 import { consumeOtp, createOtp, issueTokens, registerDoctor } from './auth.service.js';
 import { lockUser } from './transaction.service.js';
@@ -11,6 +12,12 @@ import { recordAudit } from './audit.service.js';
 const audience = 'antartalk-doctor-password-step';
 const passwordOptions = { type: argon2.argon2id, memoryCost: 65536, timeCost: 3, parallelism: 1 };
 let dummyHash;
+
+function maskEmail(email) {
+  const [local, domain] = String(email).split('@');
+  if (!local || !domain) return '[invalid-recipient]';
+  return `${local.slice(0, 2)}${'*'.repeat(Math.max(1, Math.min(6, local.length - 2)))}@${domain}`;
+}
 
 function deliveryStatus(result) {
   if (result.reason === 'ACCOUNT_CHANGED') throw new AppError(401, 'AUTH_CHALLENGE_EXPIRED', 'Your account changed. Sign in again.');
@@ -81,6 +88,7 @@ export async function sendDoctorOtp({ challengeToken }) {
 
 export async function verifyDoctorOtp({ challengeToken, otp }, context = {}) {
   const challenge = readChallenge(challengeToken);
+  logger.info({ challengeJti: challenge.jti, recipient: maskEmail(challenge.email), purpose: challenge.purpose }, 'Doctor OTP verification requested');
   const outcome = await prisma.$transaction(async (tx) => {
     const fresh = await lockUser(tx, challenge.sub);
     assertChallengeUser(fresh, challenge);

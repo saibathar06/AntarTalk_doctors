@@ -1,10 +1,22 @@
 import 'dotenv/config';
+import { URL } from 'node:url';
 import { z } from 'zod';
 
 const emailFromSchema = z.string().trim().refine((value) => {
   const mailbox = '[^\\s@<>]+@[^\\s@<>]+\\.[^\\s@<>]+';
   return new RegExp(`^${mailbox}$`).test(value) || new RegExp(`^[^<>\\r\\n]+<\\s*${mailbox}\\s*>$`).test(value);
 }, 'EMAIL_FROM must be an email address or a display name followed by <email@example.com>.');
+
+const loopbackHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
+function isAllowedProductionCorsOrigin(origin) {
+  if (origin.includes('*')) return false;
+  try {
+    const url = new URL(origin);
+    return url.origin === origin && (url.protocol === 'https:' || (url.protocol === 'http:' && loopbackHosts.has(url.hostname)));
+  } catch {
+    return false;
+  }
+}
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -62,9 +74,9 @@ if (Boolean(env.SMTP_USER) !== Boolean(env.SMTP_PASS)) {
 if (env.NODE_ENV === 'production' && (
   !env.PAYOUT_ENCRYPTION_KEY ||
   env.CORS_ORIGINS.length === 0 ||
-  env.CORS_ORIGINS.some((origin) => !origin.startsWith('https://') || origin.includes('*')) ||
+  env.CORS_ORIGINS.some((origin) => !isAllowedProductionCorsOrigin(origin)) ||
   [env.JWT_ACCESS_SECRET, env.OTP_PEPPER].some((secret) => secret.startsWith('replace-'))
-)) throw new Error('Production requires encryption, HTTPS origins and non-placeholder secrets');
+)) throw new Error('Production requires encryption, HTTPS public origins (or explicit HTTP loopback origins), and non-placeholder secrets');
 if (env.NODE_ENV === 'production' && (env.SMTP_HOST === 'localhost' || !env.SMTP_USER || !env.SMTP_PASS || !process.env.EMAIL_FROM)) {
   throw new Error('Production OTP email requires SMTP_HOST, SMTP_USER, SMTP_PASS and EMAIL_FROM.');
 }

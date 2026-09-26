@@ -29,7 +29,7 @@ Open `/doctor/login` on `http://localhost:5173`. Preserve the existing DATABASE_
 | DATABASE_URL | Shared PostgreSQL; never a separate doctor-booking database |
 | REDIS_URL | Required holds and rate limiting |
 | JWT_ACCESS_SECRET / OTP_PEPPER | Separate cryptographically random secrets, at least 32 characters |
-| CORS_ORIGINS | Exact comma-separated website origins; include `http://localhost:5173` in development |
+| CORS_ORIGINS | Exact comma-separated website origins. Production permits HTTPS origins and explicit HTTP loopback origins such as `http://localhost:5173` / `http://127.0.0.1:5173`; arbitrary HTTP origins remain rejected. |
 | SMTP_HOST / SMTP_PORT / SMTP_SECURE | Brevo: `smtp-relay.brevo.com`, `587` (or 2525), `false`; default local SMTP port is 1025 |
 | SMTP_USER / SMTP_PASS / EMAIL_FROM | Required in production; Brevo SMTP username/key and a Brevo-verified sender |
 | SMTP_CONNECTION_TIMEOUT_MS / SMTP_GREETING_TIMEOUT_MS / SMTP_SOCKET_TIMEOUT_MS | Optional SMTP timeouts; defaults match the working user-auth setup: 10000 / 10000 / 15000 ms |
