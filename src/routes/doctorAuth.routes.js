@@ -20,7 +20,11 @@ function sendTokens(res, tokens) {
 }
 doctorAuthRouter.use((req, res, next) => {
   res.set('Cache-Control', 'no-store');
-  if (!env.CORS_ORIGINS.includes(req.get('origin'))) return next(new AppError(403, 'ORIGIN_REQUIRED', 'Use the configured doctor website origin.'));
+  // The global CORS middleware already rejects a supplied, disallowed browser
+  // origin. Some same-origin development proxies omit Origin altogether; do not
+  // reject those requests solely for its absence.
+  const origin = req.get('origin');
+  if (origin && !env.CORS_ORIGINS.includes(origin)) return next(new AppError(403, 'ORIGIN_REQUIRED', 'Use the configured doctor website origin.'));
   next();
 }, authLimiter, accountAuthLimiter);
 doctorAuthRouter.post('/register', otpLimiter, validate(websiteRegisterSchema), asyncHandler(async (req, res) => res.status(201).json({ success: true, data: await registerWebsiteDoctor(req.body, { ip: req.ip }) })));

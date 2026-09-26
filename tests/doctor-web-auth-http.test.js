@@ -12,11 +12,15 @@ import { doctorAuthRouter } from '../src/routes/doctorAuth.routes.js';
 import { errorHandler } from '../src/middleware/errorHandler.js';
 const app = express(); app.use(express.json()); app.use('/api/doctor/auth', doctorAuthRouter); app.use(errorHandler);
 describe('website authentication HTTP boundary', () => {
-  it.each([undefined, 'https://attacker.example'])('rejects untrusted/missing Origin %s', async origin => {
+  it('rejects a supplied untrusted Origin', async () => {
     const req = request(app).post('/api/doctor/auth/verify-otp');
-    if (origin) req.set('Origin', origin);
+    req.set('Origin', 'https://attacker.example');
     const result = await req.send({ identifier: 'doctor@example.com', purpose: 'DOCTOR_LOGIN', otp: '123456' });
     expect(result.status).toBe(403); expect(result.body.error.code).toBe('ORIGIN_REQUIRED');
+  });
+  it('allows a request without an Origin after global CORS has accepted it', async () => {
+    const result = await request(app).post('/api/doctor/auth/verify-otp').send({ challengeToken: 'x'.repeat(40), otp: '123456' });
+    expect(result.status).toBe(200);
   });
   it('returns access token but keeps refresh token in HttpOnly scoped cookie', async () => {
     const result = await request(app).post('/api/doctor/auth/verify-otp').set('Origin', 'http://localhost:5173').send({ challengeToken: 'x'.repeat(40), otp: '123456' });
