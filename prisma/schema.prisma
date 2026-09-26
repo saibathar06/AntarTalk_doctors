@@ -125,6 +125,7 @@ model DoctorProfile {
   graduationYear           Int?
   experienceYears          Int?
   languages                String[]             @default([])
+  preferredSessionLanguage String?              @db.VarChar(80)
   expertise                String[]             @default([])
   consultationFee          Decimal?             @db.Decimal(12, 2)
   emailNotifications       Boolean              @default(true)

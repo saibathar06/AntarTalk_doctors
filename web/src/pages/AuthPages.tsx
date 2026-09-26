@@ -7,7 +7,20 @@ import {
 } from "@phosphor-icons/react";
 import { mutate } from "../api";
 import { useAuth, type PasswordChallenge } from "../auth";
-import { ErrorState } from "../components";
+import { ErrorState, TransitionLoader } from "../components";
+
+const countries = [
+  { name: "India", code: "+91" },
+  { name: "United States / Canada", code: "+1" },
+  { name: "United Kingdom", code: "+44" },
+  { name: "United Arab Emirates", code: "+971" },
+  { name: "Australia", code: "+61" },
+  { name: "Bangladesh", code: "+880" },
+  { name: "Nepal", code: "+977" },
+  { name: "Pakistan", code: "+92" },
+  { name: "Singapore", code: "+65" },
+  { name: "South Africa", code: "+27" },
+];
 
 function AuthShell({
   title,
@@ -77,7 +90,9 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
-    [cooldown, setCooldown] = useState(0);
+    [cooldown, setCooldown] = useState(0),
+    [countryCode, setCountryCode] = useState("+91"),
+    [busyLabel, setBusyLabel] = useState("");
   useEffect(() => {
     setError("");
     setNotice(mode === "verify" ? (challenge?.message ?? "") : "");
@@ -92,6 +107,11 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
+    setBusyLabel(
+      mode === "verify"
+        ? "Verifying your code…"
+        : "Sending your verification code…",
+    );
     setError("");
     setNotice("");
     const form = event.currentTarget;
@@ -108,10 +128,18 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
       } else {
         const body =
           mode === "register"
-            ? {
-                ...values,
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-              }
+            ? (() => {
+                const registration = Object.fromEntries(
+                  Object.entries(values).filter(
+                    ([key]) => key !== "countryCode" && key !== "localPhoneNumber",
+                  ),
+                );
+                return {
+                  ...registration,
+                  phoneNumber: `${countryCode}${String(values.localPhoneNumber).replace(/\D/g, "")}`,
+                  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                };
+              })()
             : { email: values.email, password: values.password };
         const result = await mutate<PasswordChallenge>(
           `/api/doctor/auth/${mode}`,
@@ -131,10 +159,12 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+      setBusyLabel("");
     }
   }
   async function resend() {
     setBusy(true);
+    setBusyLabel("Sending a new verification code…");
     setError("");
     setNotice("");
     try {
@@ -149,9 +179,11 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+      setBusyLabel("");
     }
   }
   return (
+    <>
     <AuthShell
       title={
         mode === "register"
@@ -235,17 +267,38 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
                   />
                 </label>
               </div>
-              <label>
-                Phone number
-                <input
-                  type="tel"
-                  name="phoneNumber"
-                  placeholder="+919876543210"
-                  pattern="\+[1-9][0-9]{7,14}"
-                  autoComplete="tel"
-                  required
-                />
-              </label>
+              <div className="phone-field">
+                <label>
+                  Country / code
+                  <select
+                    name="countryCode"
+                    value={countryCode}
+                    onChange={(event) => setCountryCode(event.target.value)}
+                  >
+                    {countries.map((country) => (
+                      <option key={`${country.name}-${country.code}`} value={country.code}>
+                        {country.name} ({country.code})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Mobile number
+                  <div className="phone-input">
+                    <span aria-hidden="true">{countryCode}</span>
+                    <input
+                      type="tel"
+                      name="localPhoneNumber"
+                      inputMode="numeric"
+                      placeholder="98765 43210"
+                      pattern="[0-9 ()-]{6,20}"
+                      autoComplete="tel-national"
+                      required
+                    />
+                  </div>
+                </label>
+              </div>
+              <p className="help">Choose your country and enter the local mobile number. We save it in international format.</p>
               <div className="form-grid">
                 <label>
                   Date of birth
@@ -325,5 +378,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
         )}
       </p>
     </AuthShell>
+    {busy && <TransitionLoader label={busyLabel || "Please wait…"} />}
+    </>
   );
 }

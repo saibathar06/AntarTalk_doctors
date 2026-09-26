@@ -77,7 +77,8 @@ for (const scenario of ["success", "gateway", "email"] as const) {
     await page.getByLabel("Last name").fill("Tester");
     await page.getByLabel("Email address").fill("signup-test@example.test");
     await page.getByLabel("Password", { exact: true }).fill("TestPassword123!");
-    await page.getByLabel("Phone number").fill("+919876543210");
+    await page.getByLabel("Country / code").selectOption("+91");
+    await page.getByLabel("Mobile number").fill("9876543210");
     await page.getByLabel("Date of birth").fill("1990-01-01");
     await page.getByLabel("Professional category").selectOption("PSYCHOLOGIST");
     await page

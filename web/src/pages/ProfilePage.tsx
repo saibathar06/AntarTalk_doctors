@@ -6,16 +6,19 @@ import {
   ErrorState,
   PageHeader,
   ProfileCompletionCard,
+  TransitionLoader,
 } from "../components";
 
 export function ProfilePage() {
   const { profile: p, reload } = useAuth();
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [notice, setNotice] = useState("");
+    [notice, setNotice] = useState(""),
+    [busyLabel, setBusyLabel] = useState("");
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
+    setBusyLabel("Saving your profile…");
     setError("");
     setNotice("");
     const values = Object.fromEntries(new FormData(event.currentTarget));
@@ -37,6 +40,7 @@ export function ProfilePage() {
       consultationFee: values.consultationFee || null,
       qualification: values.qualification || null,
       bio: values.bio || null,
+      preferredSessionLanguage: values.preferredSessionLanguage || null,
     };
     try {
       await mutate("/api/doctor/profile", "PATCH", input);
@@ -48,11 +52,13 @@ export function ProfilePage() {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+      setBusyLabel("");
     }
   }
   async function upload(file: File | undefined, document: boolean) {
     if (!file) return;
     setBusy(true);
+    setBusyLabel(document ? "Uploading your verification document…" : "Uploading your profile photo…");
     setError("");
     setNotice("");
     try {
@@ -65,13 +71,14 @@ export function ProfilePage() {
       await reload();
       setNotice(
         document
-          ? "Document saved. Your profile is now pending review."
+          ? "Document saved. When your profile is complete, submit it for review below."
           : "Photo saved.",
       );
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+      setBusyLabel("");
     }
   }
   async function download() {
@@ -87,13 +94,13 @@ export function ProfilePage() {
     }
   }
   async function submitForReview() {
-    setBusy(true); setError(""); setNotice("");
+    setBusy(true); setBusyLabel("Submitting your profile for review…"); setError(""); setNotice("");
     try {
       await mutate("/api/doctor/verification/submit", "POST", {});
       await reload();
       setNotice("Your complete profile was submitted for professional review. Bookings remain paused until you are verified and opt in.");
     } catch (e) { setError((e as Error).message); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setBusyLabel(""); }
   }
   return (
     <>
@@ -103,7 +110,7 @@ export function ProfilePage() {
       />
       <ProfileCompletionCard profile={p!} />
       {p!.verificationStatus === "REJECTED" && <section className="card verification-note"><h2>Review changes needed</h2><p>{p!.verificationReason || "Update your professional information, then submit it for review again."}</p></section>}
-      {p!.verificationStatus === "PENDING" && p!.verificationSubmittedAt ? <section className="card verification-note"><h2>Profile under review</h2><p>Your verification request was submitted. You can keep editing your profile, but credential changes require a new submission.</p></section> : p!.verificationStatus !== "VERIFIED" && <section className="card verification-note"><h2>Submit for professional review</h2><p>When every required profile field is complete, send your profile to AntarTalk’s verification team.</p><button className="button" disabled={busy} onClick={submitForReview}>{busy ? "Submitting…" : "Submit for review"}</button></section>}
+      {p!.verificationStatus === "PENDING" && p!.verificationSubmittedAt && <section className="card verification-note"><h2>Profile under review</h2><p>Your verification request was submitted. You can keep editing your profile, but credential changes require a new submission.</p></section>}
       <ErrorState message={error} />
       {notice && (
         <div className="alert" role="status">
@@ -130,7 +137,7 @@ export function ProfilePage() {
           <small>JPEG, PNG or WebP · up to 5 MB</small>
         </div>
       </section>
-      <form className="card profile-form" onSubmit={save} key={p!.id}>
+      <form id="professional-profile-form" className="card profile-form" onSubmit={save} key={p!.id}>
         <fieldset disabled={busy}>
           <h2>Professional information</h2>
           <div className="form-grid">
@@ -241,6 +248,24 @@ export function ProfilePage() {
               />
             </label>
             <label>
+              Preferred session language
+              <select name="preferredSessionLanguage" defaultValue={p!.preferredSessionLanguage ?? ""} required>
+                <option value="" disabled>Select the language you prefer to use in sessions</option>
+                <option value="English">English</option>
+                <option value="Hindi">Hindi</option>
+                <option value="Bengali">Bengali</option>
+                <option value="Gujarati">Gujarati</option>
+                <option value="Kannada">Kannada</option>
+                <option value="Malayalam">Malayalam</option>
+                <option value="Marathi">Marathi</option>
+                <option value="Punjabi">Punjabi</option>
+                <option value="Tamil">Tamil</option>
+                <option value="Telugu">Telugu</option>
+                <option value="Urdu">Urdu</option>
+                <option value="Other">Other</option>
+              </select>
+            </label>
+            <label>
               Consultation fee (optional)
               <input
                 name="consultationFee"
@@ -256,14 +281,6 @@ export function ProfilePage() {
             The fee is a profile preference, not a payment order. Session
             duration is controlled by the shared booking system.
           </p>
-          <div className="form-footer">
-            <span>
-              Professional approval: <strong>{p!.verificationStatus}</strong>
-            </span>
-            <button className="button" disabled={busy}>
-              {busy ? "Saving…" : "Save profile"}
-            </button>
-          </div>
         </fieldset>
       </form>
       <section className="card">
@@ -294,6 +311,21 @@ export function ProfilePage() {
           authorized backend administrators.
         </p>
       </section>
+      <section className="card profile-actions">
+        <div>
+          <p className="eyebrow">FINAL STEP</p>
+          <h2>Save, then submit for review.</h2>
+          <p>Save profile keeps your work as a draft. Submit for review sends your completed professional profile to AntarTalk’s verification team.</p>
+        </div>
+        <div className="profile-actions-buttons">
+          <button className="button secondary" type="submit" form="professional-profile-form" disabled={busy}>Save profile</button>
+          {p!.verificationStatus !== "VERIFIED" && !(p!.verificationStatus === "PENDING" && p!.verificationSubmittedAt) && (
+            <button className="button" type="button" disabled={busy || !p!.profileCompleted} onClick={submitForReview}>Submit for review</button>
+          )}
+        </div>
+        {!p!.profileCompleted && <p className="help">Finish the required fields, including a profile photo and preferred session language, then save your profile to unlock submission.</p>}
+      </section>
+      {busy && <TransitionLoader label={busyLabel || "Updating your profile…"} />}
     </>
   );
 }

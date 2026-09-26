@@ -20,6 +20,7 @@ export interface Profile {
   graduationYear: number | null;
   experienceYears: number | null;
   languages: string[];
+  preferredSessionLanguage: string | null;
   expertise: string[];
   consultationFee: string | null;
   profileImageUrl: string | null;
@@ -56,6 +57,7 @@ export interface VerificationRequest {
   experienceYears: number | null;
   bio: string | null;
   languages: string[];
+  preferredSessionLanguage: string | null;
   expertise: string[];
   profileImageUrl: string | null;
   licenseDocumentUrl: string | null;
@@ -92,6 +94,7 @@ export interface Dashboard {
   todaySessions: number;
   totalClients: number;
   monthSessions: number;
+  earnings: Balance[];
   averageRating: number | null;
   schedule: Page<Appointment>;
   timezone: string;

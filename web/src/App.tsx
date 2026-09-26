@@ -9,7 +9,6 @@ import {
   useNavigate,
 } from "react-router-dom";
 import {
-  CalendarBlankIcon,
   CalendarCheckIcon,
   ClockIcon,
   GearSixIcon,
@@ -23,7 +22,7 @@ import {
   XIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./auth";
-import { DoctorAvatar, ErrorState, LoadingState } from "./components";
+import { DoctorAvatar, ErrorState, LoadingState, TransitionLoader } from "./components";
 import { AuthPage } from "./pages/AuthPages";
 import {
   AppointmentsPage,
@@ -38,7 +37,6 @@ import { AdminVerificationPage } from "./pages/AdminVerificationPage";
 
 const links = [
   ["dashboard", "Dashboard", HouseIcon],
-  ["schedule", "Schedule", CalendarBlankIcon],
   ["appointments", "Appointments", CalendarCheckIcon],
   ["clients", "Clients", UsersIcon],
   ["availability", "Availability", ClockIcon],
@@ -162,6 +160,7 @@ function DoctorLayout() {
           <span>A thoughtful space for meaningful care.</span>
         </footer>
       </div>
+      {busy && <TransitionLoader label="Signing you out securely…" />}
     </div>
   );
 }
@@ -182,7 +181,7 @@ export function App() {
       <Route path="/doctor" element={<DoctorLayout />}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="schedule" element={<AppointmentsPage calendar />} />
+        <Route path="schedule" element={<Navigate to="/doctor/appointments" replace />} />
         <Route path="appointments" element={<AppointmentsPage />} />
         <Route path="clients" element={<ClientsPage />} />
         <Route path="availability" element={<AvailabilityPage />} />

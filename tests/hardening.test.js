@@ -22,7 +22,7 @@ beforeEach(() => {
     firstName: 'Test', lastName: 'Professional', profileImageUrl: '/photo',
     professionalCategory: 'PSYCHOLOGIST', professionalStatus: 'LICENSED_PROFESSIONAL',
     experienceYears: 0, qualification: 'MSc', licenseNumber: 'TEST', bio: 'Test bio',
-    languages: ['English'], expertise: ['Anxiety'], verificationStatus: 'VERIFIED',
+    languages: ['English'], preferredSessionLanguage: 'English', expertise: ['Anxiety'], verificationStatus: 'VERIFIED',
     isAcceptingBookings: true, user: { role: 'DOCTOR', accountStatus: 'ACTIVE', emailVerifiedAt: start }
   });
 });

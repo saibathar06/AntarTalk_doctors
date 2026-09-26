@@ -45,9 +45,9 @@ For multiple API instances, mount the same private upload volume. Photos are dec
 
 ## Website routes
 
-`/doctor/login`, `/doctor/register`, `/doctor/verify`, `/doctor/dashboard`, `/doctor/schedule`, `/doctor/appointments`, `/doctor/clients`, `/doctor/availability`, `/doctor/profile`, `/doctor/settings`, `/doctor/earnings`, `/doctor/admin`.
+`/doctor/login`, `/doctor/register`, `/doctor/verify`, `/doctor/dashboard`, `/doctor/appointments`, `/doctor/clients`, `/doctor/availability`, `/doctor/profile`, `/doctor/settings`, `/doctor/earnings`, `/doctor/admin`. The legacy `/doctor/schedule` URL redirects to Appointments.
 
-Protected pages require a valid doctor session. A server 401 triggers one serialized refresh/retry; session failure returns the user to sign-in. Incomplete profiles can browse their workspace; profile completion is a card/link, not a blocking modal. Schedule has a native date calendar and upcoming/today/completed/cancelled filters. Appointment times and calendar dates use the saved doctor timezone.
+Protected pages require a valid doctor session. A server 401 triggers one serialized refresh/retry; session failure returns the user to sign-in. Incomplete profiles can browse their workspace; profile completion is a card/link, not a blocking modal. Appointments has upcoming, today, completed and cancelled filters. Appointment times use the saved doctor timezone.
 
 ## New/extended API contract
 
@@ -87,6 +87,7 @@ interface WebsiteProfileFields {
   graduationYear: number | null;
   experienceYears: number | null;
   languages: string[];
+  preferredSessionLanguage: string | null;
   expertise: string[];
   consultationFee: string | null;       // decimal, profile preference only
   emailNotifications: boolean;         // preference; no notification worker yet
@@ -97,11 +98,11 @@ interface WebsiteProfileFields {
 }
 ```
 
-PATCH accepts the existing editable fields plus qualification, institution, graduationYear (1900–2200), experienceYears (integer 0–80), languages (max 20, 80 chars each), expertise (max 20, 100 chars each), consultationFee (positive decimal, max 10,000,000), emailNotifications. URLs, completion/eligibility flags and verificationStatus are **not** writable. Credentials, including qualification/institution/graduationYear, trigger PENDING and pause bookings. Clearing required fields also pauses bookings. Existing email change still requires currentPassword and triggers re-verification/token revocation; the website intentionally does not expose an incompatible passwordless email-change form.
+PATCH accepts the existing editable fields plus qualification, institution, graduationYear (1900–2200), experienceYears (integer 0–80), languages (max 20, 80 chars each), preferredSessionLanguage (max 80 chars), expertise (max 20, 100 chars each), consultationFee (positive decimal, max 10,000,000), emailNotifications. URLs, completion/eligibility flags and verificationStatus are **not** writable. Credentials, including qualification/institution/graduationYear, trigger PENDING and pause bookings. Clearing required fields also pauses bookings. Existing email change still requires currentPassword and triggers re-verification/token revocation; the website intentionally does not expose an incompatible passwordless email-change form.
 
 POST `/api/doctor/profile/photo` or `/documents`: multipart single `file`, max 5 MB; JPEG/PNG/WebP, plus PDF for documents. 201 `{url}`. Document replacement requires professional re-verification. GET `/api/doctor/files/:filename` is authenticated, ownership-checked binary response, not JSON; 404 on unowned/missing files. Fetch blobs with Bearer and display using object URLs, as the website does. 422 FILE_REQUIRED/INVALID_FILE/INVALID_IMAGE/INVALID_UPLOAD. Uploads do not put binaries in PostgreSQL.
 
-Completion consists of nine checks: first+last name, photo, category, nonnegative experience, qualification, status-appropriate credentials, nonblank bio, languages, expertise. Eligibility centrally additionally requires ACTIVE account, verified email, VERIFIED professional and accepting bookings. Completion does not approve credentials.
+Completion consists of ten checks: first+last name, photo, category, nonnegative experience, qualification, status-appropriate credentials, nonblank bio, languages, preferred session language, and expertise. Eligibility centrally additionally requires ACTIVE account, verified email, VERIFIED professional and accepting bookings. Completion does not approve credentials.
 
 ### Lightweight admin verification
 
@@ -122,7 +123,7 @@ The decision endpoint locks the doctor profile and rejects a stale browser decis
 
 | Endpoint | Query | Data |
 | --- | --- | --- |
-| GET /api/doctor/dashboard | None | `todaySessions`, `totalClients`, `monthSessions`, `averageRating: null`, `schedule` page, `timezone` |
+| GET /api/doctor/dashboard | None | `todaySessions`, `totalClients`, `monthSessions`, trusted ledger-derived `earnings`, `averageRating: null`, `schedule` page, `timezone` |
 | GET /api/doctor/appointments | `filter=upcoming\|today\|past\|completed\|cancelled`, optional `date=YYYY-MM-DD` overriding filter, `page=1`, `limit=20` (max100) | Paginated appointments + timezone/serverTime |
 | GET /api/doctor/clients | page/limit | Paginated `{label, appointmentCount, latestAppointmentAt}` |
 
@@ -151,7 +152,7 @@ Today/month counts include CONFIRMED, COMPLETED and NO_SHOW by start date in the
 
 ## Database rollout
 
-`202609260001_doctor_website` adds DOCTOR_LOGIN to OtpPurpose and ten DoctorProfile columns with defaults/nullability and checks for experience/year/fee. No data drop, reset, booking duplication or rewrite. profileCompleted/canTakeSessions are derived, not stored booleans. Migration and Prisma generation were successfully run against the configured database.
+`202609260001_doctor_website` adds DOCTOR_LOGIN to OtpPurpose and ten DoctorProfile columns with defaults/nullability and checks for experience/year/fee. `202609270001_preferred_session_language` adds the nullable preferred session language column. No data drop, reset, booking duplication or rewrite. profileCompleted/canTakeSessions are derived, not stored booleans. Apply migrations before serving the updated website.
 
 **Rollout consequence:** existing profiles lack newly required fields; they need profile completion before new booking/join eligibility. Existing bookings are retained. Coordinate completion before scheduled sessions. Credentials cannot be self-approved.
 

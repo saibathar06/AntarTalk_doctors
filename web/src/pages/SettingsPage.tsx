@@ -2,16 +2,18 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, mutate, setAccessToken } from "../api";
 import { useAuth } from "../auth";
-import { ErrorState, PageHeader } from "../components";
+import { ErrorState, PageHeader, TransitionLoader } from "../components";
 export function SettingsPage() {
   const { profile, reload, logout } = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
+    [busyLabel, setBusyLabel] = useState(""),
     [confirmation, setConfirmation] = useState("");
   async function update(change: object) {
     setBusy(true);
+    setBusyLabel("Saving your practice preference…");
     setError("");
     try {
       await mutate("/api/doctor/profile", "PATCH", change);
@@ -21,10 +23,12 @@ export function SettingsPage() {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+      setBusyLabel("");
     }
   }
   async function signOut() {
     setBusy(true);
+    setBusyLabel("Signing you out on every device…");
     setError("");
     try {
       await logout(true);
@@ -33,10 +37,12 @@ export function SettingsPage() {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+      setBusyLabel("");
     }
   }
   async function deleteAccount() {
     setBusy(true);
+    setBusyLabel("Deleting your account securely…");
     setError("");
     try {
       await api("/api/doctor/account", { method: "DELETE" });
@@ -46,6 +52,7 @@ export function SettingsPage() {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+      setBusyLabel("");
     }
   }
   return (
@@ -151,6 +158,7 @@ export function SettingsPage() {
           Delete my account
         </button>
       </section>
+      {busy && <TransitionLoader label={busyLabel || "Updating your settings…"} />}
     </>
   );
 }

@@ -110,6 +110,12 @@
   .profile-form .form-grid {
     gap: 0 15px;
   }
+  .profile-actions {
+    grid-template-columns: 1fr;
+  }
+  .profile-actions-buttons {
+    justify-content: flex-start;
+  }
 }
 @media (max-width: 600px) {
   .admin-topbar { align-items: center; }
@@ -196,6 +202,10 @@
   }
   .page-heading .button {
     margin-top: 0;
+  }
+  .phone-field {
+    grid-template-columns: 1fr;
+    gap: 0;
   }
   .card {
     padding: 22px;

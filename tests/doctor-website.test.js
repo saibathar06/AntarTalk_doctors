@@ -11,13 +11,13 @@ import { readUpload, saveUpload } from '../src/services/upload.service.js';
 const doctor = {
   id: 'doctor', timezone: 'Asia/Kolkata', firstName: 'Test', lastName: 'Professional',
   profileImageUrl: '/photo', professionalCategory: 'PSYCHOLOGIST', professionalStatus: 'LICENSED_PROFESSIONAL',
-  licenseNumber: 'TEST', qualification: 'MSc', experienceYears: 0, bio: 'About care', languages: ['English'], expertise: ['Anxiety'],
+  licenseNumber: 'TEST', qualification: 'MSc', experienceYears: 0, bio: 'About care', languages: ['English'], preferredSessionLanguage: 'English', expertise: ['Anxiety'],
   verificationStatus: 'VERIFIED', isAcceptingBookings: true, user: { role: 'DOCTOR', accountStatus: 'ACTIVE', emailVerifiedAt: new Date() }
 };
 beforeEach(() => { vi.clearAllMocks(); prisma.doctorProfile.findUnique.mockResolvedValue(doctor); });
 describe('server-derived profile and eligibility', () => {
   it('accepts zero years experience and calculates all required fields', () => expect(profileCompletion(doctor)).toEqual({ profileCompleted: true, completionPercentage: 100, missingFields: [] }));
-  it.each(['firstName', 'profileImageUrl', 'professionalCategory', 'qualification', 'licenseNumber', 'bio', 'languages', 'expertise'])('rejects incomplete %s', (field) => expect(canDoctorTakeSessions({ ...doctor, [field]: null })).toBe(false));
+  it.each(['firstName', 'profileImageUrl', 'professionalCategory', 'qualification', 'licenseNumber', 'bio', 'languages', 'preferredSessionLanguage', 'expertise'])('rejects incomplete %s', (field) => expect(canDoctorTakeSessions({ ...doctor, [field]: null })).toBe(false));
   it.each(['PENDING', 'SUSPENDED', 'REJECTED'])('completion never grants %s professional approval', (verificationStatus) => expect(canDoctorTakeSessions({ ...doctor, verificationStatus })).toBe(false));
   it('requires active, email-verified and accepting state', () => {
     expect(canDoctorTakeSessions({ ...doctor, isAcceptingBookings: false })).toBe(false);

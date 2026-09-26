@@ -4,8 +4,8 @@ import {
   CalendarCheckIcon,
   UsersIcon,
   CalendarDotsIcon,
-  StarIcon,
   ArrowRightIcon,
+  WalletIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "../auth";
 import {
@@ -54,9 +54,9 @@ export function DashboardPage() {
             : "Your day, thoughtfully organized."
         }
       >
-        <Link className="button secondary" to="/doctor/schedule">
+        <Link className="button secondary" to="/doctor/appointments">
           <CalendarDotsIcon />
-          View schedule
+          View appointments
         </Link>
       </PageHeader>
       <ErrorState message={resource.error} />
@@ -87,10 +87,12 @@ export function DashboardPage() {
                   detail: "Confirmed & completed sessions",
                 },
                 {
-                  label: "Average rating",
-                  value: resource.data.averageRating ?? "—",
-                  icon: StarIcon,
-                  detail: "Ratings are not available yet",
+                  label: "Total earnings",
+                  value: (resource.data.earnings ?? []).length
+                    ? resource.data.earnings.map((earning) => `${earning.currency} ${earning.earned}`).join(" · ")
+                    : "—",
+                  icon: WalletIcon,
+                  detail: "Net earnings from completed financial records",
                 },
               ].map((stat) => (
                 <section className="stat card" key={stat.label}>
@@ -160,56 +162,37 @@ export function DashboardPage() {
     </>
   );
 }
-export function AppointmentsPage({ calendar = false }: { calendar?: boolean }) {
+export function AppointmentsPage() {
   const { profile } = useAuth();
   const [filter, setFilter] = useState("upcoming"),
-    [page, setPage] = useState(1),
-    [date, setDate] = useState("");
+    [page, setPage] = useState(1);
   const resource = useResource<Page<Appointment>>(
-    `/api/doctor/appointments?filter=${filter}&page=${page}${calendar && date ? `&date=${date}` : ""}`,
+    `/api/doctor/appointments?filter=${filter}&page=${page}`,
     true,
   );
   return (
     <>
       <PageHeader
-        title={calendar ? "Your schedule." : "Appointments."}
-        description={`A clear view of your conversations. All times in ${profile!.timezone}.`}
+        title="Appointments."
+        description={`Track your upcoming, today, completed, and cancelled appointments. All times are shown in ${profile!.timezone}.`}
       />
       <section className="card">
         <div className="toolbar">
           <div className="tabs" role="group" aria-label="Appointment filter">
-            {(calendar
-              ? ["upcoming", "today", "past", "completed", "cancelled"]
-              : ["upcoming", "today", "completed", "cancelled"]
-            ).map((value) => (
+            {["upcoming", "today", "completed", "cancelled"].map((value) => (
               <button
                 key={value}
-                aria-pressed={filter === value && !date}
-                className={filter === value && !date ? "active" : ""}
+                aria-pressed={filter === value}
+                className={filter === value ? "active" : ""}
                 onClick={() => {
                   setFilter(value);
-                  setDate("");
                   setPage(1);
                 }}
               >
-                {value}
+                {value === "cancelled" ? "Cancelled" : value[0].toUpperCase() + value.slice(1)}
               </button>
             ))}
           </div>
-          {calendar && (
-            <label className="date-filter">
-              Calendar date
-              <input
-                aria-label="Calendar date"
-                type="date"
-                value={date}
-                onChange={(e) => {
-                  setDate(e.target.value);
-                  setPage(1);
-                }}
-              />
-            </label>
-          )}
         </div>
         <ErrorState message={resource.error} />
         {resource.loading ? (
@@ -240,13 +223,12 @@ export function ClientsPage() {
   );
   return (
     <>
-      <PageHeader
-        title="The people in your practice."
-        description="Only clients with appointments assigned to you appear here."
-      />
+        <PageHeader
+          title="The people in your practice."
+          description="Each distinct client who has booked an appointment with you appears here."
+        />
       <p className="alert">
-        For privacy, clients are identified by practice-specific references.
-        Names and clinical information are not available in this system.
+        This is a booking-based practice list, not a clinical records area. For privacy, clients are identified by practice-specific references and no name, contact, or clinical information is shown.
       </p>
       <ErrorState message={resource.error} />
       {resource.loading ? (
@@ -262,7 +244,7 @@ export function ClientsPage() {
                       <UsersIcon size={24} />
                     </span>
                     <h2>{client.label}</h2>
-                    <p>{client.appointmentCount} appointments</p>
+                    <p>{client.appointmentCount} booked appointments</p>
                     <small>
                       Latest scheduled:{" "}
                       {formatDate(
@@ -275,8 +257,7 @@ export function ClientsPage() {
               </div>
             ) : (
               <EmptyState title="Your connections start here">
-                Clients will appear after their first appointment is booked with
-                you.
+                Clients will appear after the first appointment is booked with you.
               </EmptyState>
             )}
             <Pager pagination={resource.data.pagination} onPage={setPage} />
@@ -321,6 +302,7 @@ function VerifiedEarnings() {
       <section className="card">
         <div className="section-title">
           <h2>Earnings ledger</h2>
+          <p>Every row is a trusted session earning record, with its booking reference, amount, date, and current status.</p>
         </div>
         {transactions.loading ? (
           <LoadingState />
@@ -332,8 +314,8 @@ function VerifiedEarnings() {
                   <table>
                     <thead>
                       <tr>
-                        <th>Date</th>
-                        <th>Booking</th>
+                        <th>Recorded</th>
+                        <th>Session booking</th>
                         <th>Amount</th>
                         <th>Status</th>
                       </tr>

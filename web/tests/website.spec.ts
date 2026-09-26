@@ -19,6 +19,7 @@ const profile = {
   graduationYear: null,
   experienceYears: null,
   languages: [],
+  preferredSessionLanguage: null,
   expertise: [],
   consultationFee: null,
   profileImageUrl: null,
@@ -48,6 +49,7 @@ async function mockWorkspace(page: Page) {
                 todaySessions: 0,
                 totalClients: 0,
                 monthSessions: 0,
+                earnings: [],
                 averageRating: null,
                 schedule: empty,
               }
@@ -91,7 +93,7 @@ test("real empty states, profile completion, navigation and responsive layout", 
     page.getByRole("heading", { name: "Complete your professional profile" }),
   ).toBeVisible();
   await expect(page.getByText("Your day has room to breathe")).toBeVisible();
-  await expect(page.getByText("Ratings are not available yet")).toBeVisible();
+  await expect(page.getByText("Net earnings from completed financial records")).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -102,7 +104,6 @@ test("real empty states, profile completion, navigation and responsive layout", 
     fullPage: true,
   });
   for (const route of [
-    "schedule",
     "appointments",
     "clients",
     "availability",
@@ -221,6 +222,7 @@ test("admin sees only the verification queue and can reject with a reason", asyn
     experienceYears: 3,
     bio: "Test profile only.",
     languages: ["English"],
+    preferredSessionLanguage: "English",
     expertise: ["Anxiety"],
     profileImageUrl: null,
     licenseDocumentUrl: null,
@@ -288,6 +290,7 @@ test("profile edits persist through the API and never submit completion flags", 
   await page.getByLabel("Years of experience").fill("0");
   await page.getByLabel("Short bio").fill("A test-only professional profile.");
   await page.getByLabel("Languages (comma separated)").fill("English, Hindi");
+  await page.getByLabel("Preferred session language").selectOption("English");
   await page.getByLabel("Areas of expertise (comma separated)").fill("Anxiety");
   const request = page.waitForRequest(
     (request) =>
@@ -297,6 +300,7 @@ test("profile edits persist through the API and never submit completion flags", 
   await page.getByRole("button", { name: "Save profile" }).click();
   const body = (await request).postDataJSON();
   expect(body.languages).toEqual(["English", "Hindi"]);
+  expect(body.preferredSessionLanguage).toBe("English");
   expect(body.experienceYears).toBe(0);
   expect(body).not.toHaveProperty("verificationStatus");
   expect(body).not.toHaveProperty("profileCompleted");

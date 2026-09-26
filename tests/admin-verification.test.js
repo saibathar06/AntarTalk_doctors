@@ -11,7 +11,7 @@ beforeEach(() => {
     professionalCategory: 'PSYCHOLOGIST', professionalStatus: 'LICENSED_PROFESSIONAL', licenseNumber: 'LIC-1', licenseAuthority: 'Authority',
     university: null, course: null, specialization: null, expectedGraduationDate: null, enrollmentNumber: null,
     qualification: 'MSc Psychology', institution: 'University', graduationYear: 2020, experienceYears: 3, bio: 'Care focused',
-    languages: ['English'], expertise: ['Anxiety'], licenseDocumentUrl: '/api/doctor/files/11111111-1111-4111-8111-111111111111.pdf', profileImageUrl: null,
+    languages: ['English'], preferredSessionLanguage: 'English', expertise: ['Anxiety'], licenseDocumentUrl: '/api/doctor/files/11111111-1111-4111-8111-111111111111.pdf', profileImageUrl: null,
     timezone: 'Asia/Kolkata', verificationStatus: 'PENDING', verificationSubmittedAt: new Date('2030-01-01T10:00:00Z'), verificationReason: null,
     isAcceptingBookings: false, updatedAt: new Date('2030-01-01T11:00:00Z'), user: { email: 'review@example.test' }
   };

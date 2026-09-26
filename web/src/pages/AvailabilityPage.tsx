@@ -8,6 +8,7 @@ import {
   ErrorState,
   LoadingState,
   PageHeader,
+  TransitionLoader,
   formatDate,
   formatTime,
   useResource,
@@ -30,7 +31,8 @@ export function AvailabilityPage() {
     [timezone, setTimezone] = useState(profile!.timezone),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [notice, setNotice] = useState("");
+    [notice, setNotice] = useState(""),
+    [busyLabel, setBusyLabel] = useState("");
   useEffect(() => {
     if (hours.data)
       setWindows(
@@ -45,6 +47,7 @@ export function AvailabilityPage() {
   async function save(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
+    setBusyLabel("Saving your weekly availability…");
     setError("");
     setNotice("");
     try {
@@ -56,6 +59,7 @@ export function AvailabilityPage() {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+      setBusyLabel("");
     }
   }
   async function block(e: FormEvent<HTMLFormElement>) {
@@ -63,6 +67,7 @@ export function AvailabilityPage() {
     const form = e.currentTarget;
     const values = Object.fromEntries(new FormData(form));
     setBusy(true);
+    setBusyLabel("Saving your unavailable period…");
     setError("");
     try {
       const start = DateTime.fromISO(String(values.startTime), {
@@ -94,10 +99,12 @@ export function AvailabilityPage() {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+      setBusyLabel("");
     }
   }
   async function remove(id: string) {
     setBusy(true);
+    setBusyLabel("Removing your unavailable period…");
     setError("");
     try {
       await api(`/api/doctor/blocked-slots/${id}`, { method: "DELETE" });
@@ -106,6 +113,7 @@ export function AvailabilityPage() {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+      setBusyLabel("");
     }
   }
   function update(index: number, change: Partial<WorkingHour>) {
@@ -117,7 +125,7 @@ export function AvailabilityPage() {
     <>
       <PageHeader
         title="Your time. Your rhythm."
-        description="Set recurring working hours and protect the time you need for yourself."
+        description="Set the recurring times clients can book, then protect specific time away without changing your weekly pattern."
       />
       <ErrorState message={error || hours.error || blocks.error} />
       {notice && (
@@ -129,10 +137,9 @@ export function AvailabilityPage() {
         <fieldset disabled={busy || hours.loading || Boolean(hours.error)}>
           <div className="section-title">
             <div>
-              <h2>Weekly availability</h2>
-              <p>
-                Multiple windows, late nights, and overnight hours are
-                supported.
+                <h2>Weekly availability</h2>
+                <p>
+                 Add each recurring window you want clients to see. Multiple windows, late nights, and overnight hours are supported.
               </p>
             </div>
             <label>
@@ -231,8 +238,7 @@ export function AvailabilityPage() {
           )}
           <div className="form-footer">
             <p className="help">
-              23:00–03:00 ends the following day. Appointments remain UTC
-              internally.
+               A window ending earlier than it starts crosses midnight: 23:00–03:00 ends the following day. Clients can book only full 60-minute appointment windows (40 minutes of session time plus a 20-minute protected buffer).
             </p>
             <button className="button">
               {busy ? "Saving…" : "Save working hours"}
@@ -243,8 +249,7 @@ export function AvailabilityPage() {
       <section className="card">
         <h2>Time away</h2>
         <p>
-          Block dates and times in {profile!.timezone}. Existing bookings must
-          be resolved before blocking overlapping periods.
+           Use this for leave, meetings, or personal time in {profile!.timezone}. It removes only the selected period from availability; your weekly hours remain unchanged. Existing bookings must be resolved before blocking an overlap.
         </p>
         <form onSubmit={block}>
           <fieldset disabled={busy}>
@@ -296,6 +301,7 @@ export function AvailabilityPage() {
           )}
         </div>
       </section>
+      {busy && <TransitionLoader label={busyLabel || "Updating availability…"} />}
     </>
   );
 }

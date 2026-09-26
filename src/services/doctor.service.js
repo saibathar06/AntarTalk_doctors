@@ -114,7 +114,7 @@ export async function deleteAccount(userId, context = {}) {
         licenseNumber: null, licenseAuthority: null, university: null, course: null,
         specialization: null, enrollmentNumber: null, bio: null, isAcceptingBookings: false,
         profileImageUrl: null, licenseDocumentUrl: null, qualification: null, institution: null,
-        graduationYear: null, experienceYears: null, languages: [], expertise: [], consultationFee: null,
+        graduationYear: null, experienceYears: null, languages: [], preferredSessionLanguage: null, expertise: [], consultationFee: null,
         verificationStatus: 'SUSPENDED'
       }
     });

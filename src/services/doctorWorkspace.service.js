@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.js';
 import { env } from '../config/env.js';
 import { AppError } from '../errors/AppError.js';
 import { canDoctorTakeSessions } from './eligibility.service.js';
+import { earningsSummary } from './payout.service.js';
 
 // Stable only within this practice; never disclose client email or phone.
 const clientLabel = (doctorId, clientId) => `Client ${crypto.createHmac('sha256', env.OTP_PEPPER).update(`${doctorId}:${clientId}`).digest('hex').slice(0, 10).toUpperCase()}`;
@@ -43,13 +44,14 @@ export async function dashboard(doctorId) {
   const doctor = await profile(doctorId);
   const today = DateTime.now().setZone(doctor.timezone).startOf('day');
   const month = today.startOf('month');
-  const [todaySessions, monthSessions, clients, schedule] = await Promise.all([
+  const [todaySessions, monthSessions, clients, schedule, earnings] = await Promise.all([
     prisma.booking.count({ where: { doctorId, status: { in: ['CONFIRMED', 'COMPLETED', 'NO_SHOW'] }, startTime: { gte: today.toJSDate(), lt: today.plus({ days: 1 }).toJSDate() } } }),
     prisma.booking.count({ where: { doctorId, status: { in: ['CONFIRMED', 'COMPLETED', 'NO_SHOW'] }, startTime: { gte: month.toJSDate(), lt: month.plus({ months: 1 }).toJSDate() } } }),
     prisma.$queryRaw`SELECT COUNT(DISTINCT "clientId")::int AS count FROM "Booking" WHERE "doctorId" = ${doctorId}::uuid`,
-    appointments(doctorId, { filter: 'today', date: undefined, limit: 100 })
+    appointments(doctorId, { filter: 'today', date: undefined, limit: 100 }),
+    earningsSummary(doctorId)
   ]);
-  return { todaySessions, totalClients: clients[0].count, monthSessions, averageRating: null, schedule, timezone: doctor.timezone };
+  return { todaySessions, totalClients: clients[0].count, monthSessions, earnings, averageRating: null, schedule, timezone: doctor.timezone };
 }
 export async function clients(doctorId, { page = 1, limit = 20 }) {
   const rows = await prisma.booking.groupBy({ by: ['clientId'], where: { doctorId }, _count: { id: true }, _max: { startTime: true }, orderBy: { _max: { startTime: 'desc' } }, skip: (page - 1) * limit, take: limit });

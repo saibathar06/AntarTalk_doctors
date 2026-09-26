@@ -9,7 +9,7 @@ const reviewSelect = {
   licenseAuthority: true, university: true, course: true, specialization: true,
   expectedGraduationDate: true, enrollmentNumber: true, qualification: true,
   institution: true, graduationYear: true, experienceYears: true, bio: true,
-  languages: true, expertise: true, licenseDocumentUrl: true, profileImageUrl: true,
+  languages: true, preferredSessionLanguage: true, expertise: true, licenseDocumentUrl: true, profileImageUrl: true,
   timezone: true, verificationStatus: true, verificationSubmittedAt: true,
   verificationReason: true, isAcceptingBookings: true, updatedAt: true,
   user: { select: { email: true } }

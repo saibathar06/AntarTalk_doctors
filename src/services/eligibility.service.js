@@ -11,10 +11,11 @@ export function profileCompletion(profile) {
       : Boolean(profile.licenseNumber?.trim()),
     bio: Boolean(profile.bio?.trim()),
     languages: Boolean(profile.languages?.length),
+    preferredSessionLanguage: Boolean(profile.preferredSessionLanguage?.trim()),
     expertise: Boolean(profile.expertise?.length)
   };
   const missingFields = Object.keys(fields).filter((key) => !fields[key]);
-  return { profileCompleted: missingFields.length === 0, completionPercentage: Math.round((9 - missingFields.length) / 9 * 100), missingFields };
+  return { profileCompleted: missingFields.length === 0, completionPercentage: Math.round((10 - missingFields.length) / 10 * 100), missingFields };
 }
 
 export function canDoctorTakeSessions(profile, user = profile?.user) {

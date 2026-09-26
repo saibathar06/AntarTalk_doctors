@@ -50,10 +50,21 @@ export function ErrorState({ message }: { message: string }) {
     </div>
   ) : null;
 }
-export function LoadingState() {
+export function LoadingState({ label = "Loading your workspace…" }: { label?: string }) {
   return (
     <div className="loading" role="status">
-      <span className="spinner" /> Loading your workspace…
+      <span className="spinner" /> {label}
+    </div>
+  );
+}
+export function TransitionLoader({ label }: { label: string }) {
+  return (
+    <div className="transition-loader" role="status" aria-live="assertive" aria-label={label}>
+      <div className="transition-loader-card">
+        <span className="spinner" aria-hidden="true" />
+        <strong>{label}</strong>
+        <p>Please keep this page open.</p>
+      </div>
     </div>
   );
 }

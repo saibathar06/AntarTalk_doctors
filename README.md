@@ -44,7 +44,7 @@ Port `2525` with `SMTP_SECURE=false` is also supported by Brevo. `EMAIL_FROM` mu
 - The same login accepts DOCTOR and ADMIN accounts. Doctors open their workspace; administrators open the small verification-review queue. CLIENT accounts cannot use this app.
 - A complete doctor profile is explicitly submitted for review. Admins can approve or reject it with an audit trail; approval keeps bookings disabled until the doctor opts in.
 - Account verification, profile completion, professional approval and accepting bookings are separate gates. Existing professionals must complete new profile fields before new bookings/join access.
-- Dashboard, schedule, appointments, clients, profile, uploads, availability, settings and earnings use real APIs. No production demo data.
+- Dashboard, appointments, clients, profile, uploads, availability, settings and earnings use real APIs. No production demo data.
 - PostgreSQL owns bookings and financial records; Redis owns temporary 180-second holds. Shared exclusion constraints prevent conflicting bookings.
 - Default window: **40 minutes therapy + 20 minutes protected buffer = one 60-minute booking**. Configurable via environment.
 - Appointment timestamps are UTC; recurring hours use the doctor's IANA timezone. Overnight `23:00–03:00` ends the next day.

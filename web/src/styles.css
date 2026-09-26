@@ -725,6 +725,41 @@ textarea {
   grid-template-columns: 1fr 1fr;
   gap: 0 22px;
 }
+.phone-field {
+  display: grid;
+  grid-template-columns: minmax(165px, 0.8fr) minmax(0, 1.2fr);
+  gap: 16px;
+}
+.phone-input {
+  display: flex;
+  min-height: 43px;
+  border: 1px solid #dfe3e9;
+  border-radius: 9px;
+  overflow: hidden;
+  background: #fff;
+}
+.phone-input span {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 11px;
+  border-right: 1px solid #dfe3e9;
+  background: #fafbfc;
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 600;
+}
+.phone-input input:not([type="checkbox"]) {
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+}
+.phone-input:focus-within {
+  outline: 3px solid #079a9c;
+  outline-offset: 3px;
+}
+.phone-input input:focus-visible {
+  outline: 0;
+}
 .profile-form h2 {
   padding: 10px 0 15px;
   border-bottom: 1px solid var(--line);
@@ -745,6 +780,25 @@ textarea {
 }
 .form-footer p {
   margin: 0;
+}
+.profile-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+}
+.profile-actions > div:first-child p:last-child {
+  margin-bottom: 0;
+}
+.profile-actions-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.profile-actions > .help {
+  grid-column: 1 / -1;
+  margin: -2px 0 0;
 }
 .file-label {
   display: inline-flex;
@@ -879,6 +933,41 @@ fieldset {
   min-height: 160px;
   color: var(--muted);
   font-size: 13px;
+}
+.transition-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #202b3e52;
+  backdrop-filter: blur(3px);
+}
+.transition-loader-card {
+  width: min(100%, 340px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 30px;
+  border: 1px solid #ffffff88;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 20px 50px #202b3e2e;
+  text-align: center;
+}
+.transition-loader-card .spinner {
+  width: 27px;
+  height: 27px;
+  border-width: 3px;
+}
+.transition-loader-card strong {
+  font-size: 15px;
+}
+.transition-loader-card p {
+  margin: 0;
+  font-size: 12px;
 }
 .spinner {
   width: 20px;
