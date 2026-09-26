@@ -30,8 +30,9 @@ Open `/doctor/login` on `http://localhost:5173`. Preserve the existing DATABASE_
 | REDIS_URL | Required holds and rate limiting |
 | JWT_ACCESS_SECRET / OTP_PEPPER | Separate cryptographically random secrets, at least 32 characters |
 | CORS_ORIGINS | Exact comma-separated website origins; include `http://localhost:5173` in development |
-| SMTP_HOST / SMTP_PORT / SMTP_SECURE | Email delivery; default local SMTP port 1025 |
-| SMTP_USER / SMTP_PASS / EMAIL_FROM | Provider credentials and verified sender when required |
+| SMTP_HOST / SMTP_PORT / SMTP_SECURE | Brevo: `smtp-relay.brevo.com`, `587` (or 2525), `false`; default local SMTP port is 1025 |
+| SMTP_USER / SMTP_PASS / EMAIL_FROM | Required in production; Brevo SMTP username/key and a Brevo-verified sender |
+| SMTP_CONNECTION_TIMEOUT_MS / SMTP_GREETING_TIMEOUT_MS / SMTP_SOCKET_TIMEOUT_MS | Optional SMTP timeouts; defaults match the working user-auth setup: 10000 / 10000 / 15000 ms |
 | UPLOAD_DIR | New; defaults to `./uploads`; private persistent volume required |
 | PAYOUT_ENCRYPTION_KEY | 64 random hexadecimal characters; required in production |
 | NODE_ENV / PORT / TRUST_PROXY | Production / 4000 / explicitly trusted proxy CIDRs only |

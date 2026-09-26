@@ -23,12 +23,16 @@ const schema = z.object({
   SLOT_INTERVAL_MINUTES: z.coerce.number().int().positive().default(60),
   CORS_ORIGINS: z.string().default('http://localhost:5173,http://localhost:4000,http://localhost:3000,http://localhost:8081'),
   LOG_LEVEL: z.string().default('info'),
-  SMTP_HOST: z.string().default('localhost'),
+  SMTP_HOST: z.string().trim().min(1).default('localhost'),
   SMTP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).default(15000),
+  // Optional granular overrides. The legacy shared timeout remains supported below.
+  SMTP_CONNECTION_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).optional(),
+  SMTP_GREETING_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).optional(),
+  SMTP_SOCKET_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).optional(),
   SMTP_PORT: z.coerce.number().int().positive().default(1025),
-  SMTP_SECURE: z.string().default('false').transform((v) => v === 'true'),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASS: z.string().optional(),
+  SMTP_SECURE: z.string().default('false').transform((v) => v.trim().toLowerCase() === 'true'),
+  SMTP_USER: z.string().trim().min(1).optional(),
+  SMTP_PASS: z.string().min(1).optional(),
   EMAIL_FROM: z.string().email().default('no-reply@antartalk.com')
 });
 
@@ -46,9 +50,15 @@ export const env = Object.freeze({
 if (env.SESSION_DURATION_MINUTES + env.BUFFER_DURATION_MINUTES !== env.SLOT_INTERVAL_MINUTES) {
   throw new Error('Session duration plus buffer must equal the slot interval');
 }
+if (Boolean(env.SMTP_USER) !== Boolean(env.SMTP_PASS)) {
+  throw new Error('SMTP_USER and SMTP_PASS must either both be configured or both be omitted.');
+}
 if (env.NODE_ENV === 'production' && (
   !env.PAYOUT_ENCRYPTION_KEY ||
   env.CORS_ORIGINS.length === 0 ||
   env.CORS_ORIGINS.some((origin) => !origin.startsWith('https://') || origin.includes('*')) ||
   [env.JWT_ACCESS_SECRET, env.OTP_PEPPER].some((secret) => secret.startsWith('replace-'))
 )) throw new Error('Production requires encryption, HTTPS origins and non-placeholder secrets');
+if (env.NODE_ENV === 'production' && (env.SMTP_HOST === 'localhost' || !env.SMTP_USER || !env.SMTP_PASS || !process.env.EMAIL_FROM)) {
+  throw new Error('Production OTP email requires SMTP_HOST, SMTP_USER, SMTP_PASS and EMAIL_FROM.');
+}

@@ -24,7 +24,7 @@ export async function createOtp(user, purpose) {
     const latest = await tx.otpChallenge.findFirst({ where: { userId: user.id, purpose }, orderBy: { createdAt: 'desc' } });
     if (latest && now.getTime() - latest.lastSentAt.getTime() < env.OTP_RESEND_COOLDOWN_SECONDS * 1000) return { sent: false, reason: 'COOLDOWN', retryAfterSeconds: Math.ceil((env.OTP_RESEND_COOLDOWN_SECONDS * 1000 - (now.getTime() - latest.lastSentAt.getTime())) / 1000) };
     await tx.otpChallenge.updateMany({ where: { userId: user.id, purpose, consumedAt: null }, data: { consumedAt: now } });
-    await tx.otpChallenge.create({
+    const challenge = await tx.otpChallenge.create({
     data: {
       userId: user.id,
       purpose,
@@ -33,11 +33,20 @@ export async function createOtp(user, purpose) {
       lastSentAt: now
     }
   });
-    return { sent: true, reason: 'SENT', retryAfterSeconds: env.OTP_RESEND_COOLDOWN_SECONDS };
+    return { sent: true, reason: 'SENT', retryAfterSeconds: env.OTP_RESEND_COOLDOWN_SECONDS, challengeId: challenge.id };
   });
   if (!created.sent) return created;
-  await sendOtpEmail({ email: user.email, code, purpose });
-  return created;
+  try {
+    await sendOtpEmail({ email: user.email, code, purpose });
+  } catch (error) {
+    // Do not leave a cooldown-causing OTP behind when SMTP rejected the send.
+    // The id is specific to this request, so a concurrent successful resend is unaffected.
+    if (created.challengeId) {
+      await prisma.otpChallenge.deleteMany({ where: { id: created.challengeId, userId: user.id, purpose, consumedAt: null } }).catch(() => {});
+    }
+    throw error;
+  }
+  return { sent: true, reason: 'SENT', retryAfterSeconds: created.retryAfterSeconds };
 }
 
 /** @param {string} userId

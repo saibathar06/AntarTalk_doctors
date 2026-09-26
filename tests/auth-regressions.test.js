@@ -22,7 +22,8 @@ beforeEach(() => {
       findFirst: vi.fn(async ({ where }) => where.consumedAt === null && challenge.consumedAt ? null : challenge),
       update: vi.fn(async ({ data }) => { if (data.attempts) challenge.attempts += 1; if (data.consumedAt) challenge.consumedAt = data.consumedAt; }),
       updateMany: vi.fn(),
-      create: vi.fn()
+      create: vi.fn(async () => ({ id: 'new-otp' })),
+      deleteMany: vi.fn(async () => ({ count: 1 }))
     },
     refreshToken: { updateMany: vi.fn(async () => ({ count: 1 })), findUnique: vi.fn(), create: vi.fn() },
     auditLog: { create: vi.fn() }
@@ -103,6 +104,7 @@ describe('OTP and session regressions', () => {
     challenge.lastSentAt = new Date(0);
     sendOtpEmail.mockRejectedValueOnce(new Error('Delivery failed'));
     await expect(beginDoctorLogin({ email: user.email, password: 'Password123' })).rejects.toThrow('Delivery failed');
+    expect(prisma.otpChallenge.deleteMany).toHaveBeenCalledWith({ where: { id: 'new-otp', userId: user.id, purpose: 'VERIFY_EMAIL', consumedAt: null } });
   });
   it('stores a real Argon2id hash instead of the registration password', async () => {
     prisma.user.create = vi.fn(async () => user);
