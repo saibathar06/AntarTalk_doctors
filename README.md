@@ -27,7 +27,9 @@ Optional local PostgreSQL/Redis: `docker compose up -d`. SMTP must be configured
 
 ## How it works
 
-- Email OTP signup/login; phone can identify an account, but codes are **email-only**. Existing password APIs remain supported.
+- Signup and login require email + password, followed by an email OTP. Passwords use Argon2id hashes. Earlier passwordless accounts must use **Forgot / set password**. Deploy the backend and website together for this updated contract.
+- The same login accepts DOCTOR and ADMIN accounts. Doctors open their workspace; administrators open the small verification-review queue. CLIENT accounts cannot use this app.
+- A complete doctor profile is explicitly submitted for review. Admins can approve or reject it with an audit trail; approval keeps bookings disabled until the doctor opts in.
 - Account verification, profile completion, professional approval and accepting bookings are separate gates. Existing professionals must complete new profile fields before new bookings/join access.
 - Dashboard, schedule, appointments, clients, profile, uploads, availability, settings and earnings use real APIs. No production demo data.
 - PostgreSQL owns bookings and financial records; Redis owns temporary 180-second holds. Shared exclusion constraints prevent conflicting bookings.
@@ -37,11 +39,13 @@ Optional local PostgreSQL/Redis: `docker compose up -d`. SMTP must be configured
 
 ## Build and verify
 
-`npm test`, `npm run lint`, `npm run typecheck`, `npm run db:validate`.
+`npm run db:migrate`, then `npm test`, `npm run lint`, `npm run typecheck`, `npm run db:validate`.
 
 Website: `npm --prefix web run lint`, `npm run web:build`, `npm run web:test`. Install the browser first with `npm --prefix web exec -- playwright install chromium`. Browser tests use isolated API fixtures; four backend infrastructure tests require disposable PostgreSQL/Redis URLs.
 
 Production: `npm run web:build`, then `npm start`. Express serves `/doctor/*` and the API under one HTTPS origin. Configure persistent private `UPLOAD_DIR` storage, production secrets and explicit trusted proxy settings.
+
+Provision the first ADMIN account through your controlled database/admin process; there is intentionally no public endpoint that can grant the ADMIN role.
 
 ## Boundaries
 

@@ -24,7 +24,7 @@ import {
 } from "@phosphor-icons/react";
 import { useAuth } from "./auth";
 import { DoctorAvatar, ErrorState, LoadingState } from "./components";
-import { AuthPage } from "./pages/AuthPages";
+import { AuthPage, PasswordRecoveryPage } from "./pages/AuthPages";
 import {
   AppointmentsPage,
   ClientsPage,
@@ -34,6 +34,7 @@ import {
 import { ProfilePage } from "./pages/ProfilePage";
 import { AvailabilityPage } from "./pages/AvailabilityPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { AdminVerificationPage } from "./pages/AdminVerificationPage";
 
 const links = [
   ["dashboard", "Dashboard", HouseIcon],
@@ -46,13 +47,14 @@ const links = [
   ["settings", "Settings", GearSixIcon],
 ] as const;
 function DoctorLayout() {
-  const { profile, loading, logout } = useAuth();
+  const { profile, viewer, loading, logout } = useAuth();
   const [open, setOpen] = useState(false),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const navigate = useNavigate(),
     location = useLocation();
   if (loading) return <LoadingState />;
+  if (viewer?.role === "ADMIN") return <Navigate to="/doctor/admin" replace />;
   if (!profile) return <Navigate to="/doctor/login" replace />;
   async function signOut() {
     setBusy(true);
@@ -163,12 +165,24 @@ function DoctorLayout() {
     </div>
   );
 }
+function AdminLayout() {
+  const { viewer, loading } = useAuth();
+  if (loading) return <LoadingState />;
+  if (!viewer) return <Navigate to="/doctor/login" replace />;
+  if (viewer.role !== "ADMIN") return <Navigate to="/doctor/dashboard" replace />;
+  return <AdminVerificationPage />;
+}
 export function App() {
   return (
     <Routes>
       <Route path="/doctor/login" element={<AuthPage mode="login" />} />
+      <Route
+        path="/doctor/forgot-password"
+        element={<PasswordRecoveryPage />}
+      />
       <Route path="/doctor/register" element={<AuthPage mode="register" />} />
       <Route path="/doctor/verify" element={<AuthPage mode="verify" />} />
+      <Route path="/doctor/admin" element={<AdminLayout />} />
       <Route path="/doctor" element={<DoctorLayout />}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />

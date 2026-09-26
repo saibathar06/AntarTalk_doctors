@@ -7,6 +7,8 @@ export const doctorProfileSelect = {
   professionalCategory: true,
   professionalStatus: true,
   verificationStatus: true,
+  verificationSubmittedAt: true,
+  verificationReason: true,
   licenseNumber: true,
   licenseAuthority: true,
   university: true,

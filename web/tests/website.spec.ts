@@ -39,19 +39,21 @@ async function mockWorkspace(page: Page) {
     const path = new URL(route.request().url()).pathname;
     const data = path.endsWith("/refresh")
       ? { accessToken: "test-only" }
-      : path.endsWith("/profile")
-        ? profile
-        : path.endsWith("/dashboard")
-          ? {
-              todaySessions: 0,
-              totalClients: 0,
-              monthSessions: 0,
-              averageRating: null,
-              schedule: empty,
-            }
-          : path.endsWith("/availability") || path.endsWith("/blocked-slots")
-            ? []
-            : empty;
+      : path.endsWith("/auth/me")
+        ? { id: "test-doctor", role: "DOCTOR" }
+        : path.endsWith("/profile")
+          ? profile
+          : path.endsWith("/dashboard")
+            ? {
+                todaySessions: 0,
+                totalClients: 0,
+                monthSessions: 0,
+                averageRating: null,
+                schedule: empty,
+              }
+            : path.endsWith("/availability") || path.endsWith("/blocked-slots")
+              ? []
+              : empty;
     await route.fulfill({ json: { success: true, data } });
   });
 }
@@ -153,23 +155,127 @@ test("sign-in requests an email code and keeps tokens out of browser storage", a
             success: false,
             error: { code: "INVALID_REFRESH_TOKEN", message: "Sign in" },
           }
-        : { success: true, data: {} },
+        : {
+            success: true,
+            data: {
+              challengeToken: "test-proof",
+              email: "test@example.test",
+              purpose: "DOCTOR_LOGIN",
+              status: "OTP_SENT",
+              retryAfterSeconds: 0,
+              otpExpiresInSeconds: 600,
+              message: "Your verification email was sent.",
+            },
+          },
     });
   });
   await page.goto("/doctor/login");
-  await page.getByLabel("Email or phone number").fill("test@example.test");
+  await page.getByLabel("Email address").fill("test@example.test");
+  await page.getByLabel("Password", { exact: true }).fill("TestPassword123!");
   const request = page.waitForRequest((request) =>
-    request.url().endsWith("/send-otp"),
+    request.url().endsWith("/login"),
   );
-  await page.getByRole("button", { name: "Send sign-in code" }).click();
+  await page.getByRole("button", { name: "Continue to OTP" }).click();
   expect((await request).postDataJSON()).toEqual({
-    identifier: "test@example.test",
-    purpose: "DOCTOR_LOGIN",
+    email: "test@example.test",
+    password: "TestPassword123!",
   });
   await expect(page.getByLabel("Verification code")).toBeVisible();
   expect(
     await page.evaluate(() => [localStorage.length, sessionStorage.length]),
   ).toEqual([0, 0]);
+  expect(
+    await page.evaluate(() => JSON.stringify(history.state)),
+  ).not.toContain("TestPassword123!");
+  await page.getByRole("button", { name: "Resend code", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "Your verification email was sent.",
+  );
+  await page.reload();
+  await expect(
+    page.getByRole("link", { name: "Enter email and password to continue" }),
+  ).toBeVisible();
+});
+
+test("admin sees only the verification queue and can reject with a reason", async ({
+  page,
+}) => {
+  const review = {
+    id: "11111111-1111-4111-8111-111111111111",
+    firstName: "Review",
+    lastName: "Doctor",
+    email: "review@example.test",
+    phoneNumber: "+919876543210",
+    professionalCategory: "PSYCHOLOGIST",
+    professionalStatus: "LICENSED_PROFESSIONAL",
+    licenseNumber: "TEST-LICENSE",
+    licenseAuthority: "Test authority",
+    university: null,
+    course: null,
+    specialization: null,
+    expectedGraduationDate: null,
+    enrollmentNumber: null,
+    qualification: "MSc Psychology",
+    institution: "Test University",
+    graduationYear: 2020,
+    experienceYears: 3,
+    bio: "Test profile only.",
+    languages: ["English"],
+    expertise: ["Anxiety"],
+    profileImageUrl: null,
+    licenseDocumentUrl: null,
+    hasLicenseDocument: false,
+    verificationStatus: "PENDING",
+    verificationSubmittedAt: "2030-01-01T10:00:00Z",
+    verificationReason: null,
+    isAcceptingBookings: false,
+    updatedAt: "2030-01-01T10:01:00Z",
+    timezone: "Asia/Kolkata",
+  };
+  let decision: unknown;
+  await page.route("**/api/**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/refresh"))
+      return route.fulfill({
+        json: { success: true, data: { accessToken: "admin-token" } },
+      });
+    if (url.pathname.endsWith("/auth/me"))
+      return route.fulfill({
+        json: { success: true, data: { id: "admin", role: "ADMIN" } },
+      });
+    if (url.pathname.endsWith("/verification-requests"))
+      return route.fulfill({
+        json: {
+          success: true,
+          data: {
+            items: [review],
+            pagination: { page: 1, limit: 25, total: 1, pages: 1 },
+          },
+        },
+      });
+    if (url.pathname.endsWith("/verification")) {
+      decision = route.request().postDataJSON();
+      return route.fulfill({ json: { success: true, data: {} } });
+    }
+    return route.fulfill({
+      status: 500,
+      json: { success: false, error: { message: "Unexpected test request" } },
+    });
+  });
+  await page.goto("/doctor/admin");
+  await page.getByRole("button", { name: "Review Doctor" }).click();
+  await page
+    .getByLabel("Rejection reason")
+    .fill("Please upload a current license document.");
+  await page.getByRole("button", { name: "Reject" }).click();
+  await expect(
+    page.getByText("Verification request rejected with the reason provided."),
+  ).toBeVisible();
+  expect(decision).toEqual({
+    status: "REJECTED",
+    reason: "Please upload a current license document.",
+    expectedUpdatedAt: review.updatedAt,
+  });
 });
 test("profile edits persist through the API and never submit completion flags", async ({
   page,

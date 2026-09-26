@@ -121,8 +121,9 @@ export function SettingsPage() {
       <section className="card">
         <h2>Security</h2>
         <p>
-          Sign-in uses single-use email codes. Refresh credentials are stored in
-          an HttpOnly cookie, never in browser storage.
+          Sign-in requires your password followed by a single-use email code.
+          Refresh credentials are stored in an HttpOnly cookie, never in browser
+          storage.
         </p>
         <button className="button secondary" disabled={busy} onClick={signOut}>
           Sign out on all devices

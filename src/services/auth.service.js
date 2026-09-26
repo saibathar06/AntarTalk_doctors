@@ -20,9 +20,9 @@ export async function createOtp(user, purpose) {
   const now = new Date();
   const created = await prisma.$transaction(async (tx) => {
     const fresh = await lockUser(tx, user.id);
-    if (fresh.email !== user.email) return false;
+    if (fresh.email !== user.email) return { sent: false, reason: 'ACCOUNT_CHANGED', retryAfterSeconds: 0 };
     const latest = await tx.otpChallenge.findFirst({ where: { userId: user.id, purpose }, orderBy: { createdAt: 'desc' } });
-    if (latest && now.getTime() - latest.lastSentAt.getTime() < env.OTP_RESEND_COOLDOWN_SECONDS * 1000) return false;
+    if (latest && now.getTime() - latest.lastSentAt.getTime() < env.OTP_RESEND_COOLDOWN_SECONDS * 1000) return { sent: false, reason: 'COOLDOWN', retryAfterSeconds: Math.ceil((env.OTP_RESEND_COOLDOWN_SECONDS * 1000 - (now.getTime() - latest.lastSentAt.getTime())) / 1000) };
     await tx.otpChallenge.updateMany({ where: { userId: user.id, purpose, consumedAt: null }, data: { consumedAt: now } });
     await tx.otpChallenge.create({
     data: {
@@ -33,10 +33,11 @@ export async function createOtp(user, purpose) {
       lastSentAt: now
     }
   });
-    return true;
+    return { sent: true, reason: 'SENT', retryAfterSeconds: env.OTP_RESEND_COOLDOWN_SECONDS };
   });
-  if (!created) return;
+  if (!created.sent) return created;
   await sendOtpEmail({ email: user.email, code, purpose });
+  return created;
 }
 
 /** @param {string} userId
@@ -125,13 +126,18 @@ export async function login({ email, password }, context = {}) {
   const valid = await argon2.verify(user?.passwordHash ?? await dummyPasswordHash, password).catch(() => false);
   if (!user || !valid) throw new AppError(401, 'INVALID_CREDENTIALS', 'Email or password is incorrect.');
   if (user.accountStatus !== 'ACTIVE') throw new AppError(403, 'ACCOUNT_UNAVAILABLE', 'This account is not active.');
+  // A legacy endpoint must not bypass the doctor's password + OTP requirement.
+  if (user.role === 'DOCTOR') {
+    const { beginDoctorLogin } = await import('./doctorAuth.service.js');
+    return beginDoctorLogin({ email, password });
+  }
   if (!user.emailVerifiedAt) throw new AppError(403, 'EMAIL_NOT_VERIFIED', 'Verify your email before signing in.');
   const tokens = await issueTokens(user);
   await recordAudit({ actorId: user.id, action: 'LOGIN_SUCCEEDED', entityType: 'User', entityId: user.id, ipAddress: context.ip });
   return { user: serializeUser(user), tokens };
 }
 
-export async function rotateRefreshToken(rawToken) {
+export async function rotateRefreshToken(rawToken, allowedRoles = null) {
   const tokenHash = sha256(rawToken);
   const stored = await prisma.refreshToken.findUnique({ where: { tokenHash }, include: { user: true } });
   if (!stored || stored.expiresAt <= new Date() || stored.user.accountStatus !== 'ACTIVE') throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'The refresh token is invalid or expired.');
@@ -146,6 +152,7 @@ export async function rotateRefreshToken(rawToken) {
   const nextHash = sha256(next);
   const rotated = await prisma.$transaction(async (tx) => {
     const fresh = await lockUser(tx, stored.userId);
+    if (allowedRoles && !allowedRoles.includes(fresh.role)) throw new AppError(403, 'FORBIDDEN', 'This account cannot use the Doctors app.');
     if (fresh.tokenVersion !== stored.user.tokenVersion || !fresh.emailVerifiedAt) return false;
     const result = await tx.refreshToken.updateMany({ where: { id: stored.id, revokedAt: null }, data: { revokedAt: new Date(), replacedByHash: nextHash } });
     if (result.count !== 1) return false;

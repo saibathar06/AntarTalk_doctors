@@ -1,42 +1,94 @@
+import argon2 from 'argon2';
 import crypto from 'node:crypto';
+import jwt from 'jsonwebtoken';
+import { env } from '../config/env.js';
 import { prisma } from '../lib/prisma.js';
 import { AppError } from '../errors/AppError.js';
 import { consumeOtp, createOtp, issueTokens, registerDoctor } from './auth.service.js';
 import { lockUser } from './transaction.service.js';
 import { recordAudit } from './audit.service.js';
 
+const audience = 'antartalk-doctor-password-step';
+const passwordOptions = { type: argon2.argon2id, memoryCost: 65536, timeCost: 3, parallelism: 1 };
+let dummyHash;
+
+function deliveryStatus(result) {
+  if (result.reason === 'ACCOUNT_CHANGED') throw new AppError(401, 'AUTH_CHALLENGE_EXPIRED', 'Your account changed. Sign in again.');
+  return {
+    status: result.sent ? 'OTP_SENT' : 'OTP_COOLDOWN',
+    message: result.sent
+      ? `Your verification email was sent. Check your inbox and spam folder. The code expires in ${env.OTP_TTL_MINUTES} minutes.`
+      : `A code was requested recently. Wait ${result.retryAfterSeconds} seconds before requesting another. If the last email failed, resend after this countdown.`,
+    retryAfterSeconds: result.retryAfterSeconds,
+    otpExpiresInSeconds: result.sent ? env.OTP_TTL_MINUTES * 60 : null
+  };
+}
+
+async function passwordStep({ email, password }) {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!dummyHash) dummyHash = argon2.hash(crypto.randomBytes(32).toString('hex'), passwordOptions);
+  const valid = await argon2.verify(user?.passwordHash ?? await dummyHash, password).catch(() => false);
+  if (!user || !valid || !['DOCTOR', 'ADMIN'].includes(user.role) || user.accountStatus !== 'ACTIVE') throw new AppError(401, 'INVALID_CREDENTIALS', 'Email or password is incorrect, or this account cannot use the Doctors app.');
+  return user;
+}
+
+function challengeFor(user, purpose) {
+  return jwt.sign({ email: user.email, role: user.role, purpose, tokenVersion: user.tokenVersion }, env.JWT_ACCESS_SECRET,
+    { algorithm: 'HS256', issuer: 'antartalk-api', audience, subject: user.id, expiresIn: '15m', jwtid: crypto.randomUUID() });
+}
+
+function readChallenge(token) {
+  try {
+    const value = jwt.verify(token, env.JWT_ACCESS_SECRET, { algorithms: ['HS256'], issuer: 'antartalk-api', audience });
+    if (typeof value === 'string' || !value.sub || !value.email || !['DOCTOR', 'ADMIN'].includes(value.role) || !['VERIFY_EMAIL', 'DOCTOR_LOGIN'].includes(value.purpose) || !Number.isInteger(value.tokenVersion)) throw new Error('Invalid challenge');
+    return value;
+  } catch { throw new AppError(401, 'AUTH_CHALLENGE_EXPIRED', 'Your sign-in step expired. Enter your email and password again.'); }
+}
+
+function assertChallengeUser(user, challenge) {
+  if (!user || user.accountStatus !== 'ACTIVE' || !['DOCTOR', 'ADMIN'].includes(user.role) || user.role !== challenge.role || user.email !== challenge.email || user.tokenVersion !== challenge.tokenVersion ||
+      (challenge.purpose === 'VERIFY_EMAIL' ? Boolean(user.emailVerifiedAt) : !user.emailVerifiedAt)) {
+    throw new AppError(401, 'AUTH_CHALLENGE_EXPIRED', 'Your account or sign-in step changed. Enter your email and password again.');
+  }
+}
+
 export async function registerWebsiteDoctor(input, context) {
-  // A random, unknowable password preserves the shared schema/password API.
-  await registerDoctor({ ...input, firstName: '', lastName: '', professionalStatus: 'LICENSED_PROFESSIONAL', password: crypto.randomBytes(48).toString('base64url') }, context);
-  return { message: 'Check your registered email for a verification code.' };
+  try {
+    // Shared registration hashes the supplied password with Argon2id before persistence.
+    await registerDoctor({ ...input, firstName: '', lastName: '', professionalStatus: 'LICENSED_PROFESSIONAL' }, context);
+  } catch (error) {
+    if (error.code === 'P2002') throw new AppError(409, 'REGISTRATION_CONFLICT', 'An account already uses this email, phone number, or license. Sign in instead, or use Forgot / set password for an earlier account.');
+    throw error;
+  }
+  const user = await passwordStep(input);
+  return { ...deliveryStatus({ sent: true, retryAfterSeconds: env.OTP_RESEND_COOLDOWN_SECONDS }), email: user.email,
+    purpose: 'VERIFY_EMAIL', challengeToken: challengeFor(user, 'VERIFY_EMAIL') };
 }
 
-async function findDoctor(identifier) {
-  return prisma.user.findFirst({ where: {
-    role: 'DOCTOR', accountStatus: 'ACTIVE',
-    ...(identifier.startsWith('+') ? { doctorProfile: { phoneNumber: identifier } } : { email: identifier.toLowerCase() })
-  } });
+export async function beginDoctorLogin(input) {
+  const user = await passwordStep(input);
+  const purpose = user.emailVerifiedAt ? 'DOCTOR_LOGIN' : 'VERIFY_EMAIL';
+  const delivery = await createOtp(user, purpose);
+  return { ...deliveryStatus(delivery), email: user.email, purpose, challengeToken: challengeFor(user, purpose) };
 }
 
-export async function sendDoctorOtp({ identifier, purpose }) {
-  const user = await findDoctor(identifier);
-  if (user && (purpose === 'VERIFY_EMAIL' ? !user.emailVerifiedAt : Boolean(user.emailVerifiedAt))) await createOtp(user, purpose);
-  // Phone is an account lookup, not proof of phone ownership. Delivery is email only.
-  return { message: 'If this account is eligible, a code has been sent to its registered email.' };
+export async function sendDoctorOtp({ challengeToken }) {
+  const challenge = readChallenge(challengeToken);
+  const user = await prisma.user.findUnique({ where: { id: challenge.sub } });
+  assertChallengeUser(user, challenge);
+  return deliveryStatus(await createOtp(user, challenge.purpose));
 }
 
-export async function verifyDoctorOtp({ identifier, purpose, otp }, context = {}) {
-  const user = await findDoctor(identifier);
-  if (!user) throw new AppError(400, 'INVALID_OTP', 'The verification code is invalid or expired.');
+export async function verifyDoctorOtp({ challengeToken, otp }, context = {}) {
+  const challenge = readChallenge(challengeToken);
   const outcome = await prisma.$transaction(async (tx) => {
-    const fresh = await lockUser(tx, user.id);
-    if (fresh.role !== 'DOCTOR') throw new AppError(403, 'FORBIDDEN', 'A professional account is required.');
-    if (fresh.email !== user.email || (purpose === 'VERIFY_EMAIL' ? Boolean(fresh.emailVerifiedAt) : !fresh.emailVerifiedAt)) throw new AppError(400, 'INVALID_OTP', 'The verification code is invalid or expired.');
-    const error = await consumeOtp(user.id, purpose, otp, tx);
-    if (error) return error; // Commit failed attempts rather than rolling them back.
-    const verified = purpose === 'VERIFY_EMAIL'
-      ? await tx.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } }) : fresh;
-    await recordAudit({ actorId: user.id, action: 'DOCTOR_OTP_LOGIN', entityType: 'User', entityId: user.id, ipAddress: context.ip }, tx);
+    const fresh = await lockUser(tx, challenge.sub);
+    assertChallengeUser(fresh, challenge);
+    const error = await consumeOtp(fresh.id, challenge.purpose, otp, tx);
+    if (error) return error; // Commit failed attempts instead of rolling them back.
+    const verified = challenge.purpose === 'VERIFY_EMAIL'
+      ? await tx.user.update({ where: { id: fresh.id }, data: { emailVerifiedAt: new Date() } }) : fresh;
+    await recordAudit({ actorId: fresh.id, action: 'DOCTOR_PASSWORD_OTP_LOGIN', entityType: 'User', entityId: fresh.id, ipAddress: context.ip }, tx);
     return verified;
   });
   if (outcome instanceof AppError) throw outcome;

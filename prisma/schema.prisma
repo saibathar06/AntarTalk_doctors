@@ -107,6 +107,8 @@ model DoctorProfile {
   professionalCategory     ProfessionalCategory
   professionalStatus       ProfessionalStatus
   verificationStatus       VerificationStatus   @default(PENDING)
+  verificationSubmittedAt  DateTime?            @db.Timestamptz(3)
+  verificationReason       String?              @db.VarChar(500)
   licenseNumber            String?              @unique @db.VarChar(100)
   licenseAuthority         String?              @db.VarChar(160)
   university               String?              @db.VarChar(200)

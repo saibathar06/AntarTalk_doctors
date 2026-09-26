@@ -3,10 +3,11 @@ vi.mock('../src/lib/prisma.js', () => ({ prisma: {} }));
 vi.mock('../src/lib/mailer.js', () => ({ sendOtpEmail: vi.fn() }));
 import { prisma } from '../src/lib/prisma.js';
 import { hashOtp } from '../src/utils/crypto.js';
-import { verifyEmail, resetPassword, resendOtp, logout, rotateRefreshToken, login } from '../src/services/auth.service.js';
+import { registerDoctor, verifyEmail, resetPassword, resendOtp, logout, rotateRefreshToken, login } from '../src/services/auth.service.js';
+import { verifyAccessToken } from '../src/utils/tokens.js';
 import { sendOtpEmail } from '../src/lib/mailer.js';
 import argon2 from 'argon2';
-import { sendDoctorOtp, verifyDoctorOtp } from '../src/services/doctorAuth.service.js';
+import { beginDoctorLogin, sendDoctorOtp, verifyDoctorOtp } from '../src/services/doctorAuth.service.js';
 
 let user;
 let challenge;
@@ -34,29 +35,93 @@ beforeEach(() => {
   sendOtpEmail.mockClear();
 });
 describe('OTP and session regressions', () => {
-  it('website login uses doctor-scoped phone lookup and email delivery', async () => {
+  it('website login requires a password and reports email delivery', async () => {
+    user.role = 'DOCTOR'; user.passwordHash = 'hash';
+    vi.spyOn(argon2, 'verify').mockResolvedValue(true);
     user.emailVerifiedAt = new Date();
     prisma.user.findFirst = vi.fn(async () => user);
     challenge.lastSentAt = new Date(0);
-    await sendDoctorOtp({ identifier: '+919876543210', purpose: 'DOCTOR_LOGIN' });
-    expect(prisma.user.findFirst).toHaveBeenCalledWith({ where: { role: 'DOCTOR', accountStatus: 'ACTIVE', doctorProfile: { phoneNumber: '+919876543210' } } });
+    const result = await beginDoctorLogin({ email: user.email, password: 'Password123' });
+    expect(result.status).toBe('OTP_SENT');
+    expect(result.challengeToken).toBeTruthy();
+    expect(() => verifyAccessToken(result.challengeToken)).toThrow();
+    expect(result.accessToken).toBeUndefined();
     expect(sendOtpEmail).toHaveBeenCalledWith(expect.objectContaining({ email: user.email, purpose: 'DOCTOR_LOGIN' }));
   });
   it('website login preserves failed-attempt limits and consumes the code once', async () => {
     user.emailVerifiedAt = new Date(); user.role = 'DOCTOR';
+    vi.spyOn(argon2, 'verify').mockResolvedValue(true);
+    const { challengeToken } = await beginDoctorLogin({ email: user.email, password: 'Password123' });
     prisma.user.findFirst = vi.fn(async () => user);
     challenge.otpHash = hashOtp(user.id, 'DOCTOR_LOGIN', '123456');
-    await expect(verifyDoctorOtp({ identifier: user.email, purpose: 'DOCTOR_LOGIN', otp: '000000' })).rejects.toMatchObject({ code: 'INVALID_OTP' });
+    await expect(verifyDoctorOtp({ challengeToken, otp: '000000' })).rejects.toMatchObject({ code: 'INVALID_OTP' });
     expect(challenge.attempts).toBe(1);
-    const tokens = await verifyDoctorOtp({ identifier: user.email, purpose: 'DOCTOR_LOGIN', otp: '123456' });
+    const tokens = await verifyDoctorOtp({ challengeToken, otp: '123456' });
     expect(tokens.accessToken).toBeTruthy();
-    await expect(verifyDoctorOtp({ identifier: user.email, purpose: 'DOCTOR_LOGIN', otp: '123456' })).rejects.toMatchObject({ code: 'OTP_EXPIRED' });
+    await expect(verifyDoctorOtp({ challengeToken, otp: '123456' })).rejects.toMatchObject({ code: 'OTP_EXPIRED' });
   });
   it('website verification marks email verified without granting professional privileges', async () => {
     user.role = 'DOCTOR'; prisma.user.findFirst = vi.fn(async () => user);
-    await verifyDoctorOtp({ identifier: user.email, purpose: 'VERIFY_EMAIL', otp: '123456' });
+    vi.spyOn(argon2, 'verify').mockResolvedValue(true);
+    const { challengeToken } = await beginDoctorLogin({ email: user.email, password: 'Password123' });
+    await verifyDoctorOtp({ challengeToken, otp: '123456' });
     expect(user.emailVerifiedAt).toBeInstanceOf(Date);
     expect(prisma.user.update).toHaveBeenCalledWith({ where: { id: user.id }, data: { emailVerifiedAt: expect.any(Date) } });
+  });
+  it('rejects passwordless OTP verification and resend', async () => {
+    await expect(verifyDoctorOtp({ otp: '123456' })).rejects.toMatchObject({ code: 'AUTH_CHALLENGE_EXPIRED' });
+    await expect(sendDoctorOtp({})).rejects.toMatchObject({ code: 'AUTH_CHALLENGE_EXPIRED' });
+  });
+  it('reports cooldown honestly and invalidates proof after password reset', async () => {
+    user.role = 'DOCTOR';
+    vi.spyOn(argon2, 'verify').mockResolvedValue(true);
+    const result = await beginDoctorLogin({ email: user.email, password: 'Password123' });
+    expect(result.status).toBe('OTP_COOLDOWN');
+    expect((await sendDoctorOtp(result)).status).toBe('OTP_COOLDOWN');
+    expect(sendOtpEmail).not.toHaveBeenCalled();
+    user.tokenVersion++;
+    await expect(verifyDoctorOtp({ ...result, otp: '123456' })).rejects.toMatchObject({ code: 'AUTH_CHALLENGE_EXPIRED' });
+  });
+  it('does not send email for an incorrect password', async () => {
+    vi.spyOn(argon2, 'verify').mockResolvedValue(false);
+    await expect(beginDoctorLogin({ email: user.email, password: 'wrong' })).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
+    expect(sendOtpEmail).not.toHaveBeenCalled();
+  });
+  it('allows administrators but rejects clients from the Doctors app login', async () => {
+    vi.spyOn(argon2, 'verify').mockResolvedValue(true);
+    user.role = 'CLIENT';
+    await expect(beginDoctorLogin({ email: user.email, password: 'Password123' })).rejects.toMatchObject({ code: 'INVALID_CREDENTIALS' });
+    user.role = 'ADMIN';
+    user.emailVerifiedAt = new Date();
+    const result = await beginDoctorLogin({ email: user.email, password: 'Password123' });
+    expect(result.challengeToken).toBeTruthy();
+    expect(result.accessToken).toBeUndefined();
+  });
+  it('propagates email failures instead of claiming a code was sent', async () => {
+    user.role = 'DOCTOR';
+    vi.spyOn(argon2, 'verify').mockResolvedValue(true);
+    challenge.lastSentAt = new Date(0);
+    sendOtpEmail.mockRejectedValueOnce(new Error('Delivery failed'));
+    await expect(beginDoctorLogin({ email: user.email, password: 'Password123' })).rejects.toThrow('Delivery failed');
+  });
+  it('stores a real Argon2id hash instead of the registration password', async () => {
+    prisma.user.create = vi.fn(async () => user);
+    prisma.doctorProfile = { create: vi.fn(async () => ({ id: 'profile' })) };
+    const password = 'RegistrationPassword123!';
+    const result = await registerDoctor({ email: user.email, password, timezone: 'UTC', professionalStatus: 'LICENSED_PROFESSIONAL' });
+    const stored = prisma.user.create.mock.calls[0][0].data;
+    expect(stored.passwordHash).toMatch(/^\$argon2id\$/);
+    expect(await argon2.verify(stored.passwordHash, password)).toBe(true);
+    expect(stored.password).toBeUndefined();
+    expect(result.passwordHash).toBeUndefined();
+  });
+  it('shared doctor login cannot bypass OTP', async () => {
+    user.role = 'DOCTOR'; user.emailVerifiedAt = new Date();
+    vi.spyOn(argon2, 'verify').mockResolvedValue(true);
+    const result = await login({ email: user.email, password: 'Password123' });
+    expect(result.challengeToken).toBeTruthy();
+    expect(result.accessToken).toBeUndefined();
+    expect(prisma.refreshToken.create).not.toHaveBeenCalled();
   });
   it('commits failed attempts and rejects the sixth verification', async () => {
     for (let i = 0; i < 5; i++) await expect(verifyEmail({ email: user.email, otp: '000000' })).rejects.toMatchObject({ code: 'INVALID_OTP' });

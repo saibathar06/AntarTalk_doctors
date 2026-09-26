@@ -41,7 +41,7 @@ export async function saveUpload(userId, doctorId, file, document = false) {
       await lockDoctor(tx, doctorId);
       const doctor = await tx.doctorProfile.findUnique({ where: { userId } });
       oldUrl = document ? doctor.licenseDocumentUrl : doctor.profileImageUrl;
-      await tx.doctorProfile.update({ where: { userId }, data: document ? { licenseDocumentUrl: url, verificationStatus: 'PENDING', isAcceptingBookings: false } : { profileImageUrl: url } });
+      await tx.doctorProfile.update({ where: { userId }, data: document ? { licenseDocumentUrl: url, verificationStatus: 'PENDING', verificationSubmittedAt: null, verificationReason: null, isAcceptingBookings: false } : { profileImageUrl: url } });
       await recordAudit({ actorId: userId, action: document ? 'LICENSE_DOCUMENT_UPDATED' : 'PROFILE_PHOTO_UPDATED', entityType: 'DoctorProfile', entityId: doctorId }, tx);
     });
   } catch (error) { await unlink(path.join(directory, filename)).catch(() => {}); throw error; }
@@ -53,4 +53,11 @@ export async function readUpload(userId, filename) {
   const url = `/api/doctor/files/${filename}`;
   if (!doctor || ![doctor.profileImageUrl, doctor.licenseDocumentUrl].includes(url)) throw new AppError(404, 'FILE_NOT_FOUND', 'File not found.');
   return path.join(uploadRoot, userId, filename);
+}
+
+export async function readAdminLicenseDocument(doctorId) {
+  const doctor = await prisma.doctorProfile.findFirst({ where: { id: doctorId, verificationStatus: 'PENDING', verificationSubmittedAt: { not: null } }, select: { userId: true, licenseDocumentUrl: true } });
+  const filename = doctor?.licenseDocumentUrl ? path.basename(doctor.licenseDocumentUrl) : '';
+  if (!doctor || !/^[a-f0-9-]{36}\.(jpg|pdf)$/.test(filename)) throw new AppError(404, 'FILE_NOT_FOUND', 'Credential document not found.');
+  return path.join(uploadRoot, doctor.userId, filename);
 }

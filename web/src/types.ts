@@ -8,6 +8,8 @@ export interface Profile {
   professionalCategory: string;
   professionalStatus: string;
   verificationStatus: string;
+  verificationSubmittedAt: string | null;
+  verificationReason: string | null;
   licenseNumber: string | null;
   university: string | null;
   course: string | null;
@@ -28,6 +30,42 @@ export interface Profile {
   isAcceptingBookings: boolean;
   canTakeSessions: boolean;
   emailNotifications: boolean;
+}
+export interface Viewer {
+  id: string;
+  role: "DOCTOR" | "ADMIN";
+}
+export interface VerificationRequest {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumber: string;
+  professionalCategory: string;
+  professionalStatus: string;
+  licenseNumber: string | null;
+  licenseAuthority: string | null;
+  university: string | null;
+  course: string | null;
+  specialization: string | null;
+  expectedGraduationDate: string | null;
+  enrollmentNumber: string | null;
+  qualification: string | null;
+  institution: string | null;
+  graduationYear: number | null;
+  experienceYears: number | null;
+  bio: string | null;
+  languages: string[];
+  expertise: string[];
+  profileImageUrl: string | null;
+  licenseDocumentUrl: string | null;
+  hasLicenseDocument: boolean;
+  verificationStatus: "PENDING";
+  verificationSubmittedAt: string;
+  verificationReason: string | null;
+  isAcceptingBookings: false;
+  updatedAt: string;
+  timezone: string;
 }
 export interface Pagination {
   page: number;

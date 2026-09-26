@@ -59,7 +59,7 @@ export async function updateProfile(userId, input, context = {}) {
     ...profileData(profileInput),
     ...(typeof profileInput.isAcceptingBookings === 'boolean' ? { isAcceptingBookings: profileInput.isAcceptingBookings } : {}),
     ...(!profileCompletion(merged).profileCompleted ? { isAcceptingBookings: false } : {}),
-    ...(credentialsChanged ? { verificationStatus: 'PENDING', isAcceptingBookings: false } : {})
+    ...(credentialsChanged ? { verificationStatus: 'PENDING', verificationSubmittedAt: null, verificationReason: null, isAcceptingBookings: false } : {})
   };
   const updated = await serialTransaction(async (tx) => {
     const freshUser = await lockUser(tx, userId);
@@ -80,6 +80,19 @@ export async function updateProfile(userId, input, context = {}) {
   });
   if (emailChanged) await createOtp(updatedUser, 'VERIFY_EMAIL');
   return { ...updated, ...await getProfile(userId), reVerificationRequired: credentialsChanged, emailVerificationRequired: emailChanged };
+}
+
+export async function submitVerification(userId, context = {}) {
+  const current = await getProfile(userId);
+  if (!current.profileCompleted) throw new AppError(422, 'PROFILE_INCOMPLETE', 'Complete every required professional profile field before submitting for review.', { missingFields: current.missingFields });
+  if (current.verificationStatus === 'SUSPENDED') throw new AppError(403, 'VERIFICATION_SUSPENDED', 'This professional account cannot submit for review.');
+  return serialTransaction(async (tx) => {
+    await lockUser(tx, userId);
+    await lockDoctor(tx, current.id);
+    const profile = await tx.doctorProfile.update({ where: { id: current.id }, data: { verificationStatus: 'PENDING', verificationSubmittedAt: new Date(), verificationReason: null, isAcceptingBookings: false }, select: doctorProfileSelect });
+    await recordAudit({ actorId: userId, action: 'DOCTOR_VERIFICATION_SUBMITTED', entityType: 'DoctorProfile', entityId: current.id, ipAddress: context.ip }, tx);
+    return { ...profile, ...profileCompletion(profile), submitted: true };
+  });
 }
 
 export async function deleteAccount(userId, context = {}) {

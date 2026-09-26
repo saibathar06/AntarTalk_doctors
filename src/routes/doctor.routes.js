@@ -37,6 +37,7 @@ doctorRouter.get('/clients', validate(payoutListSchema), asyncHandler(async (req
 
 doctorRouter.get('/me', asyncHandler(async (req, res) => res.json({ success: true, data: await doctor.getProfile(req.user.id) })));
 doctorRouter.patch('/me', validate(updateProfileSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await doctor.updateProfile(req.user.id, req.body, { ip: req.ip }) })));
+doctorRouter.post('/verification/submit', asyncHandler(async (req, res) => res.json({ success: true, data: await doctor.submitVerification(req.user.id, { ip: req.ip }) })));
 
 doctorRouter.get('/availability', asyncHandler(async (req, res) => res.json({ success: true, data: await availability.getWorkingHours(req.user.doctorProfile.id) })));
 doctorRouter.put('/availability', validate(replaceHoursSchema), asyncHandler(async (req, res) => {

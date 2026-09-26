@@ -153,6 +153,47 @@ small,
   box-shadow: 0 4px 18px #202b3e03;
   margin-bottom: 24px;
 }
+.admin-page {
+  max-width: 1280px;
+  margin: auto;
+  min-height: 100vh;
+  padding: 36px 38px 70px;
+}
+.admin-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 34px;
+  padding-bottom: 22px;
+}
+.admin-topbar h1 { margin-bottom: 0; }
+.admin-topbar .eyebrow { margin-bottom: 6px; }
+.admin-review-grid { display: grid; grid-template-columns: minmax(245px, .75fr) minmax(0, 1.55fr); gap: 22px; align-items: start; }
+.admin-queue { padding: 12px; }
+.admin-queue h2 { padding: 12px 12px 5px; }
+.review-row { display: block; width: 100%; text-align: left; border: 0; border-radius: 10px; background: transparent; padding: 13px 12px; color: var(--navy); }
+.review-row:hover, .review-row.selected { background: #fff1f7; }
+.review-row strong, .review-row span { display: block; }
+.review-row span { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.admin-detail-heading { display: flex; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); margin-bottom: 20px; padding-bottom: 15px; }
+.admin-detail-heading h2 { margin-bottom: 4px; }
+.admin-detail-heading p { margin-bottom: 0; }
+.review-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 20px 0; }
+.review-facts div { border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.review-facts small, .review-facts strong { display: block; }
+.review-facts small { margin-bottom: 4px; }
+.review-facts strong { font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.review-copy { border-top: 1px solid var(--line); padding-top: 18px; margin-top: 20px; }
+.review-copy p { margin-bottom: 8px; overflow-wrap: anywhere; }
+.review-actions { border-top: 1px solid var(--line); margin-top: 22px; padding-top: 20px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: end; }
+.review-actions label { margin: 0; grid-column: 2; }
+.review-actions label textarea { margin-top: 5px; width: 100%; }
+.review-actions > div { grid-column: 2; display: flex; gap: 10px; justify-content: flex-end; }
+.button.reject { background: #a72b4a; }
+.verification-note { background: #fff8e9; border-color: #f7dfaa; }
+.verification-note .button { margin-bottom: 0; }
 .brand {
   position: relative;
   font-size: 25px;

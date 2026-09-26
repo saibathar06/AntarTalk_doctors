@@ -37,6 +37,8 @@ export const requireDoctor = (req, res, next) => {
   return requireRole('DOCTOR')(req, res, next);
 };
 export const requireClient = requireRole('CLIENT');
+export const requireWebsiteUser = (req, _res, next) => ['DOCTOR', 'ADMIN'].includes(req.user?.role)
+  ? next() : next(new AppError(403, 'FORBIDDEN', 'This app is for doctors and administrators only.'));
 
 export const requireVerifiedDoctor = (req, _res, next) => {
   if (req.user?.doctorProfile?.verificationStatus !== 'VERIFIED') {

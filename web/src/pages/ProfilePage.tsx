@@ -86,6 +86,15 @@ export function ProfilePage() {
       setError((e as Error).message);
     }
   }
+  async function submitForReview() {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await mutate("/api/doctor/verification/submit", "POST", {});
+      await reload();
+      setNotice("Your complete profile was submitted for professional review. Bookings remain paused until you are verified and opt in.");
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  }
   return (
     <>
       <PageHeader
@@ -93,6 +102,8 @@ export function ProfilePage() {
         description="Clients will see your professional information. Keep it thoughtful and up to date."
       />
       <ProfileCompletionCard profile={p!} />
+      {p!.verificationStatus === "REJECTED" && <section className="card verification-note"><h2>Review changes needed</h2><p>{p!.verificationReason || "Update your professional information, then submit it for review again."}</p></section>}
+      {p!.verificationStatus === "PENDING" && p!.verificationSubmittedAt ? <section className="card verification-note"><h2>Profile under review</h2><p>Your verification request was submitted. You can keep editing your profile, but credential changes require a new submission.</p></section> : p!.verificationStatus !== "VERIFIED" && <section className="card verification-note"><h2>Submit for professional review</h2><p>When every required profile field is complete, send your profile to AntarTalk’s verification team.</p><button className="button" disabled={busy} onClick={submitForReview}>{busy ? "Submitting…" : "Submit for review"}</button></section>}
       <ErrorState message={error} />
       {notice && (
         <div className="alert" role="status">

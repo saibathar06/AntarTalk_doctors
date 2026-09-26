@@ -44,7 +44,7 @@ For multiple API instances, mount the same private upload volume. Photos are dec
 
 ## Website routes
 
-`/doctor/login`, `/doctor/register`, `/doctor/verify`, `/doctor/dashboard`, `/doctor/schedule`, `/doctor/appointments`, `/doctor/clients`, `/doctor/availability`, `/doctor/profile`, `/doctor/settings`, `/doctor/earnings`.
+`/doctor/login`, `/doctor/register`, `/doctor/verify`, `/doctor/dashboard`, `/doctor/schedule`, `/doctor/appointments`, `/doctor/clients`, `/doctor/availability`, `/doctor/profile`, `/doctor/settings`, `/doctor/earnings`, `/doctor/admin`.
 
 Protected pages require a valid doctor session. A server 401 triggers one serialized refresh/retry; session failure returns the user to sign-in. Incomplete profiles can browse their workspace; profile completion is a card/link, not a blocking modal. Schedule has a native date calendar and upcoming/today/completed/cancelled filters. Appointment times and calendar dates use the saved doctor timezone.
 
@@ -52,23 +52,26 @@ Protected pages require a valid doctor session. A server 401 triggers one serial
 
 All JSON results retain `{ "success": true, "data": ... }`. Errors retain `{ "success": false, "error": { "code": "...", "message": "...", "details": ... } }`; details are optional. Use JSON Content-Type except uploads. Doctor data routes require `Authorization: Bearer <accessToken>` and active, email-verified DOCTOR ownership. No route accepts a doctorId from the browser to select another doctor's data.
 
-### Browser OTP authentication
+### Browser password + OTP authentication
 
 All paths below start `/api/doctor/auth`. All require an allowed `Origin`; missing/untrusted Origin is 403 ORIGIN_REQUIRED. IP/account rate limits, OTP cooldown, expiry and attempt limits reuse existing services. OTPs are never returned or logged.
 
 | Method / path | Body | Result |
 | --- | --- | --- |
-| POST /register | `email`, `phoneNumber` (E.164), `dateOfBirth` (YYYY-MM-DD, adult), `licenseNumber`, `professionalCategory`, optional `timezone` | 201 `{message}`; creates PENDING, incomplete, not-accepting doctor and sends verification email |
-| POST /send-otp | `identifier` (email or E.164 phone), `purpose`: VERIFY_EMAIL or DOCTOR_LOGIN | 200 generic `{message}` regardless of account existence/eligibility |
-| POST /verify-otp | Same identifier/purpose plus six-digit `otp` | 200 `{accessToken, expiresIn}`; sets refresh cookie; VERIFY_EMAIL also verifies email |
+| POST /register | `email`, `password`, `phoneNumber` (E.164), `dateOfBirth` (YYYY-MM-DD, adult), `licenseNumber`, `professionalCategory`, optional `timezone` | 201 password-step challenge (below); creates PENDING, incomplete, not-accepting doctor and sends verification email |
+| POST /login | `email`, `password` | 200 password-step challenge; no access/refresh tokens until OTP succeeds |
+| POST /send-otp | `challengeToken` | 200 `{status, message, retryAfterSeconds, otpExpiresInSeconds}`; reports OTP_SENT or OTP_COOLDOWN |
+| POST /verify-otp | `challengeToken`, six-digit `otp` | 200 `{accessToken, expiresIn}`; sets refresh cookie; VERIFY_EMAIL also verifies email |
 | POST /refresh | Empty JSON, browser refresh cookie | 200 `{accessToken, expiresIn}` and rotated cookie |
 | POST /logout | Bearer token + refresh cookie; optional `allDevices: true` | 200 `{loggedOut: true}`; clears cookie and revokes refresh; allDevices also revokes access versions |
 
-Phone is an **identifier only**. All codes go to registered email; no claim of SMS/phone verification is made. Website signup uses the existing categories PSYCHOLOGIST, PSYCHIATRIST, COUNSELLOR and LICENSED_PROFESSIONAL status. Existing final-year-student registration through `/api/auth/register` remains intact, and existing student accounts can sign in to the website. No unsupported categories were silently mapped.
+Login uses email, not phone. All codes go to registered email; no claim of SMS/phone verification is made. Website signup uses the existing categories PSYCHOLOGIST, PSYCHIATRIST, COUNSELLOR and LICENSED_PROFESSIONAL status. Existing final-year-student registration through `/api/auth/register` remains intact, and existing student accounts can sign in to the website. No unsupported categories were silently mapped.
 
-A cryptographically random, unknowable password hash satisfies the existing shared User schema for passwordless website signup. Existing `/api/auth/*` password/OTP/refresh endpoints are unchanged and still serve existing clients. Website users can establish a password through the existing reset flow if needed.
+Passwords require 10–128 characters with uppercase, lowercase and a digit, and are stored only as Argon2id hashes. Password-step responses contain `{challengeToken, email, purpose, status, message, retryAfterSeconds, otpExpiresInSeconds}`. Purpose is chosen by the server: VERIFY_EMAIL for unverified email, otherwise DOCTOR_LOGIN. The proof expires after 15 minutes, is not an access token, and is kept only in React memory. Reloading verification requires entering credentials again. OTP_SENT means SMTP accepted the send, not guaranteed inbox delivery; OTP_COOLDOWN does not claim a new email was sent and has null otpExpiresInSeconds. Email delivery failures return 503 EMAIL_DELIVERY_UNAVAILABLE.
 
-Relevant errors: 422 VALIDATION_ERROR, 409 RESOURCE_CONFLICT for duplicate registration, 400 INVALID_OTP/OTP_EXPIRED, 429 OTP_ATTEMPTS_EXCEEDED/RATE_LIMITED, 401 INVALID_REFRESH_TOKEN/REFRESH_TOKEN_REUSE/SESSION_REVOKED. If registration's SMTP delivery fails after commit, use the login page's “still need to verify” option to resend; do not create another account.
+Earlier passwordless accounts must use `/doctor/forgot-password`: POST `/api/auth/forgot-password` with `{email}`, then POST `/api/auth/reset-password` with `{email, otp, newPassword}`. Reset revokes existing sessions; sign in again with password and OTP. Recovery requests remain non-enumerating. No database migration is needed for this authentication change. Deploy backend and website together. **Compatibility change:** shared POST `/api/auth/login` now returns the password-step challenge for DOCTOR accounts too, preventing a password-only bypass; CLIENT/ADMIN flows are unchanged. Existing sessions expire/revoke normally.
+
+Relevant errors: 422 VALIDATION_ERROR, 409 REGISTRATION_CONFLICT for duplicate website registration, 400 INVALID_OTP/OTP_EXPIRED, 429 OTP_ATTEMPTS_EXCEEDED/RATE_LIMITED, 401 INVALID_CREDENTIALS/AUTH_CHALLENGE_EXPIRED/INVALID_REFRESH_TOKEN/REFRESH_TOKEN_REUSE/SESSION_REVOKED. If registration's SMTP delivery fails after commit, sign in with the submitted password to request verification again; do not register again. Use password recovery for older passwordless accounts.
 
 ### Profile and uploads
 
@@ -97,7 +100,22 @@ PATCH accepts the existing editable fields plus qualification, institution, grad
 
 POST `/api/doctor/profile/photo` or `/documents`: multipart single `file`, max 5 MB; JPEG/PNG/WebP, plus PDF for documents. 201 `{url}`. Document replacement requires professional re-verification. GET `/api/doctor/files/:filename` is authenticated, ownership-checked binary response, not JSON; 404 on unowned/missing files. Fetch blobs with Bearer and display using object URLs, as the website does. 422 FILE_REQUIRED/INVALID_FILE/INVALID_IMAGE/INVALID_UPLOAD. Uploads do not put binaries in PostgreSQL.
 
-Completion consists of nine checks: first+last name, photo, category, nonnegative experience, qualification, status-appropriate credentials, nonblank bio, languages, expertise. Eligibility centrally additionally requires ACTIVE account, verified email, VERIFIED professional and accepting bookings. Completion does not approve credentials. Admin verification stays at PATCH `/api/admin/doctors/:id/verification` with ADMIN authorization.
+Completion consists of nine checks: first+last name, photo, category, nonnegative experience, qualification, status-appropriate credentials, nonblank bio, languages, expertise. Eligibility centrally additionally requires ACTIVE account, verified email, VERIFIED professional and accepting bookings. Completion does not approve credentials.
+
+### Lightweight admin verification
+
+The same website login accepts only DOCTOR and ADMIN accounts. After the password + OTP sequence, the server-derived role routes a doctor to `/doctor/dashboard` and an administrator to `/doctor/admin`; CLIENT accounts are rejected by the doctor-app login. There is no general admin dashboard, analytics, financial reporting or user-management surface.
+
+Doctors explicitly submit a complete profile with `POST /api/doctor/verification/submit`. It sets `verificationStatus` to `PENDING`, records `verificationSubmittedAt`, clears any prior rejection reason, and forces `isAcceptingBookings` to false. A mere registration or incomplete PENDING profile is not visible to reviewers. Credential or license-document changes clear the submission and pause bookings, so the doctor must submit again.
+
+| Endpoint | Authorization | Result |
+| --- | --- | --- |
+| GET `/api/admin/verification-requests?page=1&limit=25` | ADMIN | Submitted PENDING review queue only |
+| GET `/api/admin/verification-requests/:id` | ADMIN | One submitted profile’s review-safe professional details |
+| GET `/api/admin/doctors/:id/license-document` | ADMIN | Credential attachment for an actively submitted review only; authenticated download |
+| PATCH `/api/admin/doctors/:id/verification` | ADMIN | Body `{status: "VERIFIED" | "REJECTED", expectedUpdatedAt, reason?}`; rejection requires a reason |
+
+The decision endpoint locks the doctor profile and rejects a stale browser decision with `409 VERIFICATION_REQUEST_CHANGED` if the profile changed after it was opened. Every submit, approval and rejection creates an audit log. Approval sets `VERIFIED` but leaves `isAcceptingBookings: false`; the doctor has to opt in after approval. Rejection stores the reason for the doctor and leaves bookings off.
 
 ### Workspace reads
 
@@ -154,7 +172,7 @@ Browser tests use intercepted, isolated API fixtures to check routing, empty sta
 
 Verified during implementation: 118 backend tests passed, 4 infrastructure tests skipped; 12 desktop/mobile Playwright tests passed; backend/frontend lint and TypeScript checks, Prisma validation/generation and production build passed. Both production dependency audits reported zero vulnerabilities. Migration status confirms all four migrations applied. Browser coverage includes profile-save payloads and join authorization; desktop/mobile screenshots were visually inspected.
 
-No live video, payout/payment provider, rating service, appointment-notification delivery, admin review UI or SMS service is connected. Notification preference is persisted and explicitly labeled as future functionality. Consultation fee is not authoritative pricing. Categories were preserved rather than expanding clinical eligibility without policy. Client identities remain private pseudonyms until a scoped client-name model exists.
+No live video, payout/payment provider, rating service, appointment-notification delivery or SMS service is connected. Notification preference is persisted and explicitly labeled as future functionality. Consultation fee is not authoritative pricing. Categories were preserved rather than expanding clinical eligibility without policy. Client identities remain private pseudonyms until a scoped client-name model exists.
 
 Local upload cleanup: `npm run uploads:prune` reports orphan counts without deleting. After review, `npm run uploads:prune -- --apply` removes only unreferenced generated files older than 24 hours under UPLOAD_DIR; never directories or referenced files. Schedule this operationally to recover failed deletions. Files removed by cleanup are not recoverable except from your backups.
 
