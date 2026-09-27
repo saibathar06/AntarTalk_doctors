@@ -284,7 +284,7 @@ export function BookSessionPage() {
             <div><dt>Professional</dt><dd>Dr. {doctor.firstName} {doctor.lastName}</dd></div>
             <div><dt>Date</dt><dd>{longDate(booking.startTime, doctor.timezone)}</dd></div>
             <div><dt>Therapy time</dt><dd>{slotTime(booking.startTime, doctor.timezone)} – {slotTime(new Date(new Date(booking.startTime).getTime() + booking.sessionDurationMinutes * 60_000).toISOString(), doctor.timezone)}</dd></div>
-            <div><dt>Session duration</dt><dd>{booking.sessionDurationMinutes} minutes</dd></div>
+            <div><dt>Session length</dt><dd>Up to {booking.sessionDurationMinutes} minutes</dd></div>
             <div><dt>Booking ID</dt><dd>{booking.id}</dd></div>
             <div><dt>Payment status</dt><dd>Successful payment accepted</dd></div>
             <div><dt>Booking status</dt><dd>{booking.status}</dd></div>
@@ -367,7 +367,7 @@ export function BookSessionPage() {
           <div><dt>Professional</dt><dd>Dr. {doctor.firstName} {doctor.lastName}</dd></div>
           <div><dt>Date</dt><dd>{longDate(activeSlot.startTime, doctor.timezone)}</dd></div>
           <div><dt>Therapy</dt><dd>{slotTime(activeSlot.startTime, doctor.timezone)} – {slotTime(therapyEnd!, doctor.timezone)}</dd></div>
-          <div><dt>Duration</dt><dd>{activeSlot.sessionDurationMinutes} min therapy + {activeSlot.bufferDurationMinutes} min protected buffer</dd></div>
+          <div><dt>Session length</dt><dd>Up to {activeSlot.sessionDurationMinutes} minutes</dd></div>
           <div><dt>Language</dt><dd>{doctor.preferredSessionLanguage || "To be confirmed"}</dd></div>
           <div><dt>Listed fee</dt><dd>{doctor.consultationFee ? `₹${doctor.consultationFee}` : "Confirmed by payment order"}</dd></div>
         </dl>
