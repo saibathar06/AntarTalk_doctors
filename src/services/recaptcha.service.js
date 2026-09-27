@@ -3,7 +3,11 @@ import { AppError } from '../errors/AppError.js';
 import { logger } from '../lib/logger.js';
 
 export function recaptchaConfiguration() {
-  return { enabled: Boolean(env.RECAPTCHA_SITE_KEY && env.RECAPTCHA_SECRET_KEY), siteKey: env.RECAPTCHA_SITE_KEY ?? null };
+  return {
+    enabled: Boolean(env.RECAPTCHA_SITE_KEY && env.RECAPTCHA_SECRET_KEY),
+    siteKey: env.RECAPTCHA_SITE_KEY ?? null,
+    mode: env.RECAPTCHA_MODE
+  };
 }
 
 /** Verify a Google reCAPTCHA v2 checkbox token, while safely supporting v3 responses. */

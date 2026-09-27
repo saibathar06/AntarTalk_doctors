@@ -36,6 +36,7 @@ const schema = z.object({
   OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().positive().default(60),
   RECAPTCHA_SITE_KEY: z.string().trim().min(1).optional(),
   RECAPTCHA_SECRET_KEY: z.string().trim().min(1).optional(),
+  RECAPTCHA_MODE: z.enum(['v2_checkbox', 'v3']).default('v2_checkbox'),
   RECAPTCHA_VERIFY_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).default(10000),
   RESERVATION_TTL_SECONDS: z.coerce.number().int().positive().default(180),
   SESSION_DURATION_MINUTES: z.coerce.number().int().positive().default(40),
