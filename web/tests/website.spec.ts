@@ -279,14 +279,8 @@ test("availability saves multiple and overnight periods through API", async ({
 test("sign-in requests an email code and keeps tokens out of browser storage", async ({
   page,
 }) => {
-  await page.route("https://www.google.com/recaptcha/api.js?*", (route) => route.fulfill({
-    contentType: "application/javascript",
-    // api.js may finish loading before its checkbox methods become available.
-    body: "window.grecaptcha={};setTimeout(()=>{window.grecaptcha.render=(element,options)=>{setTimeout(()=>options.callback('test-recaptcha-token'),0);return 1};window.grecaptcha.reset=()=>{};window.onloadcallback()},150);",
-  }));
   await page.route("**/api/**", (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path.endsWith("/recaptcha-config")) return route.fulfill({ json: { success: true, data: { enabled: true, siteKey: "test-site-key" } } });
     return route.fulfill({
       status: path.endsWith("/refresh") ? 401 : 200,
       json: path.endsWith("/refresh")
@@ -318,7 +312,6 @@ test("sign-in requests an email code and keeps tokens out of browser storage", a
   expect((await request).postDataJSON()).toEqual({
     email: "test@example.test",
     password: "TestPassword123!",
-    recaptchaToken: "test-recaptcha-token",
   });
   await expect(page.getByLabel("Verification code")).toBeVisible();
   expect(

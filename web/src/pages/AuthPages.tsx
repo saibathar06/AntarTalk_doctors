@@ -8,7 +8,6 @@ import {
 import { mutate } from "../api";
 import { useAuth, type PasswordChallenge } from "../auth";
 import { ErrorState, TransitionLoader } from "../components";
-import { RecaptchaCheckbox } from "../components/RecaptchaCheckbox";
 
 const countries = [
   { name: "India", code: "+91" },
@@ -94,9 +93,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     [notice, setNotice] = useState(""),
     [cooldown, setCooldown] = useState(0),
     [countryCode, setCountryCode] = useState("+91"),
-    [busyLabel, setBusyLabel] = useState(""),
-    [recaptchaToken, setRecaptchaToken] = useState(""),
-    [captchaResetVersion, setCaptchaResetVersion] = useState(0);
+    [busyLabel, setBusyLabel] = useState("");
   useEffect(() => {
     setError("");
     setNotice(mode === "verify" ? (challenge?.message ?? "") : (location.state as { notice?: string } | null)?.notice ?? "");
@@ -134,31 +131,28 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         const viewer = await auth.signIn(result.accessToken);
         navigate(viewer.role === "ADMIN" ? "/doctor/admin" : "/doctor/dashboard", { replace: true });
       } else if (mode === "forgot") {
-        if (!recaptchaToken) throw new Error("Complete the security verification before continuing.");
-        await mutate("/api/doctor/auth/forgot-password", "POST", { email: values.email, recaptchaToken });
+        await mutate("/api/doctor/auth/forgot-password", "POST", { email: values.email });
         navigate("/doctor/reset-password", { state: { email: values.email, notice: "If an eligible account exists, we sent a six-digit reset code." } });
       } else if (mode === "reset") {
         if (values.newPassword !== values.confirmPassword) throw new Error("The new password and confirmation do not match.");
         await mutate("/api/doctor/auth/reset-password", "POST", { email: values.email, otp: values.otp, newPassword: values.newPassword });
         navigate("/doctor/login", { state: { email: values.email, notice: "Password changed. Sign in with your new password." } });
       } else {
-        if (!recaptchaToken) throw new Error("Complete the security verification before continuing.");
         const body =
           mode === "register"
             ? (() => {
                 const registration = Object.fromEntries(
                   Object.entries(values).filter(
-                    ([key]) => key !== "countryCode" && key !== "localPhoneNumber" && key !== "g-recaptcha-response",
+                    ([key]) => key !== "countryCode" && key !== "localPhoneNumber",
                   ),
                 );
                 return {
                   ...registration,
                   phoneNumber: `${countryCode}${String(values.localPhoneNumber).replace(/\D/g, "")}`,
                   timezone: "Asia/Kolkata",
-                  recaptchaToken,
                 };
               })()
-            : { email: values.email, password: values.password, recaptchaToken };
+            : { email: values.email, password: values.password };
         const result = await mutate<PasswordChallenge>(
           `/api/doctor/auth/${mode}`,
           "POST",
@@ -175,10 +169,6 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
       }
     } catch (e) {
       setError((e as Error).message);
-      if (mode === "login" || mode === "register" || mode === "forgot") {
-        setRecaptchaToken("");
-        setCaptchaResetVersion((version) => version + 1);
-      }
     } finally {
       setBusy(false);
       setBusyLabel("");
@@ -397,8 +387,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
               </label>
             </>
           )}
-          {(mode === "login" || mode === "register" || mode === "forgot") && <RecaptchaCheckbox key={mode} onToken={setRecaptchaToken} resetVersion={captchaResetVersion} />}
-          <button className="button full" disabled={busy || ((mode === "login" || mode === "register" || mode === "forgot") && !recaptchaToken)}>
+          <button className="button full" disabled={busy}>
             {busy
               ? "Please wait…"
               : mode === "register"

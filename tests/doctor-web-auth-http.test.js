@@ -14,12 +14,6 @@ import { authLimiter } from '../src/middleware/rateLimits.js';
 const app = express(); app.use(express.json()); app.use('/api/doctor/auth', doctorAuthRouter); app.use(errorHandler);
 describe('website authentication HTTP boundary', () => {
   beforeEach(() => vi.clearAllMocks());
-  it('serves public CAPTCHA configuration without consuming a login attempt', async () => {
-    const result = await request(app).get('/api/doctor/auth/recaptcha-config');
-    expect(result.status).toBe(200);
-    expect(result.body.data).toHaveProperty('enabled');
-    expect(authLimiter).not.toHaveBeenCalled();
-  });
   it('rejects a cookie-free refresh without consuming a login attempt', async () => {
     const result = await request(app).post('/api/doctor/auth/refresh').send({});
     expect(result.status).toBe(401);
@@ -28,7 +22,8 @@ describe('website authentication HTTP boundary', () => {
   });
   it('still applies the auth limiter to login attempts', async () => {
     const result = await request(app).post('/api/doctor/auth/login').send({ email: 'doctor@example.com', password: 'Password123' });
-    expect(result.status).toBe(422);
+    expect(result.status).toBe(200);
+    expect(result.body.data.challengeToken).toBe('proof');
     expect(authLimiter).toHaveBeenCalledOnce();
   });
   it('rejects a supplied untrusted Origin', async () => {

@@ -38,15 +38,11 @@ EMAIL_FROM=verified-sender@your-domain.com
 
 Port `2525` with `SMTP_SECURE=false` is also supported by Brevo. `EMAIL_FROM` must be a Brevo-verified sender. Production refuses to start with missing SMTP credentials; development may use a local SMTP server. Never put these values in `web/.env.local`.
 
-### reCAPTCHA and Razorpay
+### Razorpay
 
-Set these **backend-only** values in Render/local API configuration before using the new authentication and payment screens. Do not add them to `web/.env.local` or commit them.
+Set these **backend-only** values in Render/local API configuration before using the payment screens. Do not add them to `web/.env.local` or commit them.
 
 ```env
-RECAPTCHA_SITE_KEY=your-google-site-key
-RECAPTCHA_SECRET_KEY=your-google-secret
-# Google reCAPTCHA v2 “I'm not a robot” Checkbox
-RECAPTCHA_MODE=v2_checkbox
 RAZORPAY_KEY_ID=your-razorpay-test-key-id
 RAZORPAY_KEY_SECRET=your-razorpay-test-key-secret
 RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
@@ -54,7 +50,7 @@ RAZORPAY_CURRENCY=INR
 PLATFORM_COMMISSION_PERCENT=20
 ```
 
-The Doctors website is configured for **Google reCAPTCHA v2 Checkbox** (`RECAPTCHA_MODE=v2_checkbox`). The public site key comes from `GET /api/doctor/auth/recaptcha-config`; Vite does not read a `VITE_RECAPTCHA_SITE_KEY` for this app. The backend keeps the matching secret and verifies each submitted token with Google. For local testing, allow `localhost` on the development key and open `http://localhost:5173`; the current key rejects `127.0.0.1`. Allow `antartalk-doctors.onrender.com` on the production key when serving the website there. OTP resend relies on its signed challenge, cooldown and rate limits.
+CAPTCHA is currently removed. Password validation, email OTP, resend cooldowns and authentication rate limits remain enabled. No CAPTCHA environment variables are required.
 
 Razorpay orders are created by the API from the doctor’s stored `consultationFee`; clients never submit an amount or commission. The server verifies the returned checkout signature and captured payment before it confirms the existing Redis-held booking. Configure a Razorpay webhook at `POST /api/payments/razorpay/webhook` with the same webhook secret. The webhook is signed and records capture status, but it never creates a booking by itself.
 
