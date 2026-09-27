@@ -95,7 +95,8 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     [cooldown, setCooldown] = useState(0),
     [countryCode, setCountryCode] = useState("+91"),
     [busyLabel, setBusyLabel] = useState(""),
-    [recaptchaToken, setRecaptchaToken] = useState("");
+    [recaptchaToken, setRecaptchaToken] = useState(""),
+    [captchaResetVersion, setCaptchaResetVersion] = useState(0);
   useEffect(() => {
     setError("");
     setNotice(mode === "verify" ? (challenge?.message ?? "") : (location.state as { notice?: string } | null)?.notice ?? "");
@@ -147,7 +148,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
             ? (() => {
                 const registration = Object.fromEntries(
                   Object.entries(values).filter(
-                    ([key]) => key !== "countryCode" && key !== "localPhoneNumber",
+                    ([key]) => key !== "countryCode" && key !== "localPhoneNumber" && key !== "g-recaptcha-response",
                   ),
                 );
                 return {
@@ -174,6 +175,10 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
       }
     } catch (e) {
       setError((e as Error).message);
+      if (mode === "login" || mode === "register" || mode === "forgot") {
+        setRecaptchaToken("");
+        setCaptchaResetVersion((version) => version + 1);
+      }
     } finally {
       setBusy(false);
       setBusyLabel("");
@@ -392,7 +397,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
               </label>
             </>
           )}
-          {(mode === "login" || mode === "register" || mode === "forgot") && <RecaptchaCheckbox onToken={setRecaptchaToken} action={mode === "register" ? "doctor_register" : mode === "forgot" ? "doctor_forgot_password" : "doctor_login"} />}
+          {(mode === "login" || mode === "register" || mode === "forgot") && <RecaptchaCheckbox key={mode} onToken={setRecaptchaToken} resetVersion={captchaResetVersion} />}
           <button className="button full" disabled={busy || ((mode === "login" || mode === "register" || mode === "forgot") && !recaptchaToken)}>
             {busy
               ? "Please wait…"

@@ -45,7 +45,7 @@ Set these **backend-only** values in Render/local API configuration before using
 ```env
 RECAPTCHA_SITE_KEY=your-google-site-key
 RECAPTCHA_SECRET_KEY=your-google-secret
-# v2_checkbox for “I'm not a robot” Checkbox keys; v3 for score-based keys
+# Google reCAPTCHA v2 “I'm not a robot” Checkbox
 RECAPTCHA_MODE=v2_checkbox
 RAZORPAY_KEY_ID=your-razorpay-test-key-id
 RAZORPAY_KEY_SECRET=your-razorpay-test-key-secret

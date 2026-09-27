@@ -6,9 +6,9 @@ for (const scenario of ["success", "gateway", "email"] as const) {
     page,
   }) => {
     let registrations = 0;
-    await page.route("https://www.google.com/recaptcha/api.js?render=explicit", (route) => route.fulfill({
+    await page.route("https://www.google.com/recaptcha/api.js?*", (route) => route.fulfill({
       contentType: "application/javascript",
-      body: "window.grecaptcha={render:(element,options)=>{setTimeout(()=>options.callback('test-recaptcha-token'),0);return 1},reset:()=>{}};",
+      body: "window.grecaptcha={render:(element,options)=>{element.innerHTML='<textarea name=\"g-recaptcha-response\" hidden>test-recaptcha-token</textarea>';setTimeout(()=>options.callback('test-recaptcha-token'),0);return 1},reset:()=>{}};setTimeout(()=>window.onloadcallback(),100);",
     }));
     await page.route("**/api/**", async (route) => {
       const path = new URL(route.request().url()).pathname;
