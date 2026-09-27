@@ -240,6 +240,7 @@ model Payment {
   status            PaymentStatus @default(PENDING)
   provider          String        @db.VarChar(50)
   providerReference String        @unique @db.VarChar(200)
+  providerPaymentId String?       @unique @db.VarChar(200)
   createdAt         DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt         DateTime      @updatedAt @db.Timestamptz(3)
   booking           Booking?

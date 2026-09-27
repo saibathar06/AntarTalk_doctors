@@ -11,6 +11,19 @@ export function SettingsPage() {
     [busy, setBusy] = useState(false),
     [busyLabel, setBusyLabel] = useState(""),
     [confirmation, setConfirmation] = useState("");
+  async function changePassword(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    if (values.newPassword !== values.confirmPassword) { setError("The new password and confirmation do not match."); return; }
+    setBusy(true); setBusyLabel("Changing your password and signing out other devices…"); setError("");
+    try {
+      await mutate("/api/doctor/change-password", "POST", { currentPassword: values.currentPassword, newPassword: values.newPassword });
+      setNotice("Password changed. Sign in again on this and other devices.");
+      setAccessToken(null);
+      navigate("/doctor/login", { state: { notice: "Password changed. Sign in with your new password." } });
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); setBusyLabel(""); }
+  }
   async function update(change: object) {
     setBusy(true);
     setBusyLabel("Saving your practice preference…");
@@ -135,6 +148,14 @@ export function SettingsPage() {
         <button className="button secondary" disabled={busy} onClick={signOut}>
           Sign out on all devices
         </button>
+        <form className="settings-password-form" onSubmit={changePassword}>
+          <h3>Change password</h3>
+          <label>Current password<input name="currentPassword" type="password" autoComplete="current-password" required /></label>
+          <label>New password<input name="newPassword" type="password" autoComplete="new-password" minLength={10} maxLength={128} required /></label>
+          <label>Confirm new password<input name="confirmPassword" type="password" autoComplete="new-password" minLength={10} maxLength={128} required /></label>
+          <p className="help">Use 10–128 characters with uppercase, lowercase and a number.</p>
+          <button className="button secondary" disabled={busy} type="submit">Change password</button>
+        </form>
       </section>
       <section className="card danger-zone">
         <h2>Delete account</h2>

@@ -48,8 +48,8 @@ export async function confirmBooking(clientId, input, idempotencyKey) {
           sessionDurationMinutes: scheduling.sessionDurationMinutes,
           bufferDurationMinutes: scheduling.bufferDurationMinutes,
           status: 'CONFIRMED',
-          paymentId: input.paymentId
-          ,reservationExpiresAt: new Date(reservation.value.expiresAt)
+          paymentId: input.paymentId,
+          reservationExpiresAt: new Date(reservation.value.expiresAt)
         },
         select: bookingSelect
       });

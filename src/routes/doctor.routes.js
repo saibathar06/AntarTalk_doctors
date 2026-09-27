@@ -7,7 +7,7 @@ import * as payouts from '../services/payout.service.js';
 import * as sessions from '../services/session.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import {
-  blockedIdSchema, createBlockedSlotSchema, payoutAccountSchema, payoutListSchema,
+  blockedIdSchema, changePasswordSchema, createBlockedSlotSchema, payoutAccountSchema, payoutListSchema,
   replaceHoursSchema, sessionListSchema, updateProfileSchema, withdrawSchema
 } from '../validation/doctor.schemas.js';
 import { z } from 'zod';
@@ -17,6 +17,7 @@ import multer from 'multer';
 import * as workspace from '../services/doctorWorkspace.service.js';
 import { saveUpload, readUpload } from '../services/upload.service.js';
 import { pagination } from '../validation/common.js';
+import { changePassword } from '../services/auth.service.js';
 
 export const doctorRouter = Router();
 doctorRouter.use(authenticateUser, requireDoctor, sensitiveLimiter);
@@ -38,6 +39,10 @@ doctorRouter.get('/clients', validate(payoutListSchema), asyncHandler(async (req
 doctorRouter.get('/me', asyncHandler(async (req, res) => res.json({ success: true, data: await doctor.getProfile(req.user.id) })));
 doctorRouter.patch('/me', validate(updateProfileSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await doctor.updateProfile(req.user.id, req.body, { ip: req.ip }) })));
 doctorRouter.post('/verification/submit', asyncHandler(async (req, res) => res.json({ success: true, data: await doctor.submitVerification(req.user.id, { ip: req.ip }) })));
+doctorRouter.post('/change-password', validate(changePasswordSchema), asyncHandler(async (req, res) => {
+  await changePassword(req.user.id, req.body, { ip: req.ip });
+  res.json({ success: true, data: { changed: true } });
+}));
 
 doctorRouter.get('/availability', asyncHandler(async (req, res) => res.json({ success: true, data: await availability.getWorkingHours(req.user.doctorProfile.id) })));
 doctorRouter.put('/availability', validate(replaceHoursSchema), asyncHandler(async (req, res) => {

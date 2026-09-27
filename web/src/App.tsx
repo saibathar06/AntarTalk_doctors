@@ -179,6 +179,8 @@ export function App() {
       <Route path="/doctor/login" element={<AuthPage mode="login" />} />
       <Route path="/doctor/register" element={<AuthPage mode="register" />} />
       <Route path="/doctor/verify" element={<AuthPage mode="verify" />} />
+      <Route path="/doctor/forgot-password" element={<AuthPage mode="forgot" />} />
+      <Route path="/doctor/reset-password" element={<AuthPage mode="reset" />} />
       <Route path="/doctor/admin" element={<AdminLayout />} />
       <Route path="/doctor" element={<DoctorLayout />}>
         <Route index element={<Navigate to="dashboard" replace />} />

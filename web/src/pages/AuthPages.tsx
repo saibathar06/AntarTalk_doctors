@@ -8,6 +8,7 @@ import {
 import { mutate } from "../api";
 import { useAuth, type PasswordChallenge } from "../auth";
 import { ErrorState, TransitionLoader } from "../components";
+import { RecaptchaCheckbox } from "../components/RecaptchaCheckbox";
 
 const countries = [
   { name: "India", code: "+91" },
@@ -82,7 +83,8 @@ function AuthShell({
   );
 }
 
-export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
+type AuthMode = "login" | "register" | "verify" | "forgot" | "reset";
+export function AuthPage({ mode }: { mode: AuthMode }) {
   const navigate = useNavigate(),
     location = useLocation(),
     auth = useAuth();
@@ -92,10 +94,11 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
     [notice, setNotice] = useState(""),
     [cooldown, setCooldown] = useState(0),
     [countryCode, setCountryCode] = useState("+91"),
-    [busyLabel, setBusyLabel] = useState("");
+    [busyLabel, setBusyLabel] = useState(""),
+    [recaptchaToken, setRecaptchaToken] = useState("");
   useEffect(() => {
     setError("");
-    setNotice(mode === "verify" ? (challenge?.message ?? "") : "");
+    setNotice(mode === "verify" ? (challenge?.message ?? "") : (location.state as { notice?: string } | null)?.notice ?? "");
     setCooldown(mode === "verify" ? (challenge?.retryAfterSeconds ?? 0) : 0);
   }, [mode, challenge]);
   useEffect(() => {
@@ -110,6 +113,10 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
     setBusyLabel(
       mode === "verify"
         ? "Verifying your code…"
+        : mode === "reset"
+          ? "Changing your password…"
+          : mode === "forgot"
+            ? "Sending reset code…"
         : "Sending your verification code…",
     );
     setError("");
@@ -125,7 +132,16 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
         );
         const viewer = await auth.signIn(result.accessToken);
         navigate(viewer.role === "ADMIN" ? "/doctor/admin" : "/doctor/dashboard", { replace: true });
+      } else if (mode === "forgot") {
+        if (!recaptchaToken) throw new Error("Complete the security verification before continuing.");
+        await mutate("/api/doctor/auth/forgot-password", "POST", { email: values.email, recaptchaToken });
+        navigate("/doctor/reset-password", { state: { email: values.email, notice: "If an eligible account exists, we sent a six-digit reset code." } });
+      } else if (mode === "reset") {
+        if (values.newPassword !== values.confirmPassword) throw new Error("The new password and confirmation do not match.");
+        await mutate("/api/doctor/auth/reset-password", "POST", { email: values.email, otp: values.otp, newPassword: values.newPassword });
+        navigate("/doctor/login", { state: { email: values.email, notice: "Password changed. Sign in with your new password." } });
       } else {
+        if (!recaptchaToken) throw new Error("Complete the security verification before continuing.");
         const body =
           mode === "register"
             ? (() => {
@@ -138,9 +154,10 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
                   ...registration,
                   phoneNumber: `${countryCode}${String(values.localPhoneNumber).replace(/\D/g, "")}`,
                   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                  recaptchaToken,
                 };
               })()
-            : { email: values.email, password: values.password };
+            : { email: values.email, password: values.password, recaptchaToken };
         const result = await mutate<PasswordChallenge>(
           `/api/doctor/auth/${mode}`,
           "POST",
@@ -190,6 +207,10 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
           ? "Start your practice here."
           : mode === "verify"
             ? "Verify your email."
+            : mode === "forgot"
+              ? "Reset your password."
+              : mode === "reset"
+                ? "Choose a new password."
             : "Welcome back."
       }
       description={
@@ -197,6 +218,10 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
           ? "Create your account with a password, then verify your email."
           : mode === "verify"
             ? "Enter the six-digit email code to finish signing in. Resending reports whether a new email was sent."
+            : mode === "forgot"
+              ? "Enter your account email and complete the security check to receive a reset code."
+              : mode === "reset"
+                ? "Enter the reset code from your email, then choose a strong new password."
             : "Enter your email and password. Next, verify the code sent to your email."
       }
     >
@@ -212,7 +237,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
         </Link>
       ) : (
         <form onSubmit={submit}>
-          {mode !== "verify" && (
+          {mode !== "verify" && mode !== "reset" && (
             <>
               <label>
                 Email address
@@ -226,7 +251,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
                   }
                 />
               </label>
-              <label>
+              {mode !== "forgot" && <label>
                 Password
                 <input
                   type="password"
@@ -238,9 +263,17 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
                     mode === "register" ? "new-password" : "current-password"
                   }
                 />
-              </label>
+              </label>}
+              {mode === "login" && <p className="help auth-forgot"><Link to="/doctor/forgot-password">Forgot password?</Link></p>}
             </>
           )}
+          {mode === "reset" && <>
+            <label>Email address<input type="email" name="email" autoComplete="username" required defaultValue={(location.state as { email?: string } | null)?.email ?? ""} /></label>
+            <label>Reset code<input className="otp-input" name="otp" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required /></label>
+            <label>New password<input type="password" name="newPassword" minLength={10} maxLength={128} autoComplete="new-password" required /></label>
+            <label>Confirm new password<input type="password" name="confirmPassword" minLength={10} maxLength={128} autoComplete="new-password" required /></label>
+            <p className="help">Use 10–128 characters with uppercase, lowercase and a number.</p>
+          </>}
           {mode === "register" && (
             <>
               <p className="help">
@@ -346,6 +379,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
               </label>
             </>
           )}
+          {(mode === "login" || mode === "register" || mode === "forgot") && <RecaptchaCheckbox onToken={setRecaptchaToken} />}
           <button className="button full" disabled={busy}>
             {busy
               ? "Please wait…"
@@ -353,7 +387,11 @@ export function AuthPage({ mode }: { mode: "login" | "register" | "verify" }) {
                 ? "Create account"
                 : mode === "login"
                   ? "Continue to OTP"
-                  : "Verify & continue"}
+                  : mode === "forgot"
+                    ? "Send reset code"
+                    : mode === "reset"
+                      ? "Change password"
+                      : "Verify & continue"}
             <ArrowRightIcon />
           </button>
         </form>

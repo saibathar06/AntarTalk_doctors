@@ -2,10 +2,11 @@ import { Router } from 'express';
 import { authenticateUser, requireClient } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { confirmBooking } from '../services/booking.service.js';
+import { createRazorpayOrder, verifyRazorpayPayment } from '../services/razorpay.service.js';
 import { getBookableDoctor, readBookableDoctorPhoto } from '../services/bookingDiscovery.service.js';
 import { getAvailableSlots, reserveSlot } from '../services/slot.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { availabilityQuerySchema, confirmSchema, reserveSchema } from '../validation/booking.schemas.js';
+import { availabilityQuerySchema, confirmSchema, razorpayOrderSchema, razorpayVerifySchema, reserveSchema } from '../validation/booking.schemas.js';
 import { sensitiveLimiter } from '../middleware/rateLimits.js';
 import { z } from 'zod';
 import { uuid } from '../validation/common.js';
@@ -41,5 +42,15 @@ bookingRouter.post('/reserve', authenticateUser, requireClient, sensitiveLimiter
 
 bookingRouter.post('/confirm', authenticateUser, requireClient, sensitiveLimiter, validate(confirmSchema), asyncHandler(async (req, res) => {
   const data = await confirmBooking(req.user.id, req.body, req.headers['idempotency-key']);
+  res.status(201).json({ success: true, data });
+}));
+
+bookingRouter.post('/razorpay/order', authenticateUser, requireClient, sensitiveLimiter, validate(razorpayOrderSchema), asyncHandler(async (req, res) => {
+  const data = await createRazorpayOrder(req.user.id, req.body);
+  res.status(201).json({ success: true, data });
+}));
+
+bookingRouter.post('/razorpay/verify', authenticateUser, requireClient, sensitiveLimiter, validate(razorpayVerifySchema), asyncHandler(async (req, res) => {
+  const data = await verifyRazorpayPayment(req.user.id, req.body, req.headers['idempotency-key']);
   res.status(201).json({ success: true, data });
 }));

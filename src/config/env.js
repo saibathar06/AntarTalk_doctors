@@ -34,6 +34,9 @@ const schema = z.object({
   OTP_TTL_MINUTES: z.coerce.number().int().positive().default(10),
   OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
   OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().positive().default(60),
+  RECAPTCHA_SITE_KEY: z.string().trim().min(1).optional(),
+  RECAPTCHA_SECRET_KEY: z.string().trim().min(1).optional(),
+  RECAPTCHA_VERIFY_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).default(10000),
   RESERVATION_TTL_SECONDS: z.coerce.number().int().positive().default(180),
   SESSION_DURATION_MINUTES: z.coerce.number().int().positive().default(40),
   BUFFER_DURATION_MINUTES: z.coerce.number().int().nonnegative().default(20),
@@ -51,7 +54,12 @@ const schema = z.object({
   SMTP_USER: z.string().trim().min(1).optional(),
   SMTP_PASS: z.string().min(1).optional(),
   // Nodemailer accepts both `sender@example.com` and `AntarTalk <sender@example.com>`.
-  EMAIL_FROM: emailFromSchema.default('AntarTalk<antartalk.main@gmail.com>')
+  EMAIL_FROM: emailFromSchema.default('AntarTalk<antartalk.main@gmail.com>'),
+  RAZORPAY_KEY_ID: z.string().trim().min(1).optional(),
+  RAZORPAY_KEY_SECRET: z.string().min(1).optional(),
+  RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional(),
+  RAZORPAY_CURRENCY: z.literal('INR').default('INR'),
+  PLATFORM_COMMISSION_PERCENT: z.coerce.number().min(0).max(99.99).default(20)
 });
 
 const parsed = schema.safeParse(process.env);
@@ -71,12 +79,19 @@ if (env.SESSION_DURATION_MINUTES + env.BUFFER_DURATION_MINUTES !== env.SLOT_INTE
 if (Boolean(env.SMTP_USER) !== Boolean(env.SMTP_PASS)) {
   throw new Error('SMTP_USER and SMTP_PASS must either both be configured or both be omitted.');
 }
+if (Boolean(env.RECAPTCHA_SITE_KEY) !== Boolean(env.RECAPTCHA_SECRET_KEY)) {
+  throw new Error('RECAPTCHA_SITE_KEY and RECAPTCHA_SECRET_KEY must either both be configured or both be omitted.');
+}
+if (Boolean(env.RAZORPAY_KEY_ID) !== Boolean(env.RAZORPAY_KEY_SECRET)) {
+  throw new Error('RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must either both be configured or both be omitted.');
+}
 const productionRequirements = {
   payoutEncryptionKeyPresent: Boolean(env.PAYOUT_ENCRYPTION_KEY),
   corsOriginsConfigured: env.CORS_ORIGINS.length > 0,
   corsOriginsValid: env.CORS_ORIGINS.every(isAllowedProductionCorsOrigin),
   jwtAccessSecretNonPlaceholder: !env.JWT_ACCESS_SECRET.startsWith('replace-'),
-  otpPepperNonPlaceholder: !env.OTP_PEPPER.startsWith('replace-')
+  otpPepperNonPlaceholder: !env.OTP_PEPPER.startsWith('replace-'),
+  recaptchaConfigured: Boolean(env.RECAPTCHA_SITE_KEY && env.RECAPTCHA_SECRET_KEY)
 };
 const productionSmtpRequirements = {
   smtpHostConfigured: env.SMTP_HOST !== 'localhost',

@@ -18,6 +18,7 @@ import { authRouter } from './routes/auth.routes.js';
 import { bookingRouter } from './routes/booking.routes.js';
 import { doctorRouter } from './routes/doctor.routes.js';
 import { doctorAuthRouter } from './routes/doctorAuth.routes.js';
+import { handleRazorpayWebhook } from './services/razorpay.service.js';
 import { asyncHandler } from './utils/asyncHandler.js';
 
 export const app = express();
@@ -34,7 +35,11 @@ app.use(pinoHttp({ logger, genReqId: (req) => req.id, serializers: {
   res: (res) => ({ statusCode: res.statusCode }),
   err: (err) => ({ type: err.type, code: err.code })
 } }));
-app.use(helmet({ contentSecurityPolicy: { directives: { imgSrc: ["'self'", 'data:', 'blob:'] } } }));
+app.use(helmet({ contentSecurityPolicy: { directives: {
+  imgSrc: ["'self'", 'data:', 'blob:'],
+  scriptSrc: ["'self'", 'https://www.google.com', 'https://www.gstatic.com', 'https://checkout.razorpay.com'],
+  frameSrc: ["'self'", 'https://www.google.com', 'https://www.gstatic.com', 'https://api.razorpay.com', 'https://checkout.razorpay.com']
+} } }));
 app.use(cors({
   origin(origin, callback) {
     if (!origin || env.CORS_ORIGINS.includes(origin)) return callback(null, true);
@@ -45,6 +50,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Request-Id']
 }));
 app.use(compression());
+app.post('/api/payments/razorpay/webhook', express.raw({ type: 'application/json', limit: '64kb' }), asyncHandler(async (req, res) => {
+  const data = await handleRazorpayWebhook(req.body, req.get('x-razorpay-signature'));
+  res.json({ success: true, data });
+}));
 app.use(express.json({ limit: '32kb' }));
 app.get('/health/live', (_req, res) => res.json({ success: true, data: { status: 'ok' } }));
 app.get('/health/ready', asyncHandler(async (_req, res) => {

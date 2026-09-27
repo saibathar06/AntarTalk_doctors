@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { amount, currency, dateOfBirth, email, isoDate, isoDateTime, pagination, phone, uuid } from './common.js';
+import { amount, currency, dateOfBirth, email, isoDate, isoDateTime, pagination, password, phone, uuid } from './common.js';
 
 export const updateProfileSchema = z.object({ body: z.object({
   firstName: z.string().trim().min(1).max(100).optional(),
@@ -26,8 +26,8 @@ export const updateProfileSchema = z.object({ body: z.object({
   expertise: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
   consultationFee: amount.nullable().optional(),
   emailNotifications: z.boolean().optional(),
-  isAcceptingBookings: z.boolean().optional()
-  ,email: email.optional(),
+  isAcceptingBookings: z.boolean().optional(),
+  email: email.optional(),
   currentPassword: z.string().min(1).max(128).optional()
 }).strict()
   .refine((body) => Object.keys(body).some((key) => key !== 'currentPassword'), 'At least one profile field is required')
@@ -52,6 +52,10 @@ export const createBlockedSlotSchema = z.object({ body: z.object({
 }).refine((value) => value.startTime < value.endTime, { message: 'endTime must be after startTime', path: ['endTime'] }) });
 
 export const blockedIdSchema = z.object({ params: z.object({ id: uuid }) });
+export const changePasswordSchema = z.object({ body: z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: password
+}) });
 export const sessionListSchema = z.object({ query: z.object({ ...pagination, status: z.enum(['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'NO_SHOW']).optional() }) });
 
 export const payoutListSchema = z.object({ query: z.object({ ...pagination }) });

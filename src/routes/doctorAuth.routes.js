@@ -6,9 +6,10 @@ import { authenticateUser, requireWebsiteUser } from '../middleware/auth.js';
 import { authLimiter, otpLimiter, accountAuthLimiter } from '../middleware/rateLimits.js';
 import { validate } from '../middleware/validate.js';
 import { logout, rotateRefreshToken } from '../services/auth.service.js';
-import { beginDoctorLogin, registerWebsiteDoctor, sendDoctorOtp, verifyDoctorOtp } from '../services/doctorAuth.service.js';
+import { beginDoctorLogin, registerWebsiteDoctor, requestDoctorPasswordReset, resetDoctorPassword, sendDoctorOtp, verifyDoctorOtp } from '../services/doctorAuth.service.js';
+import { recaptchaConfiguration, verifyRecaptcha } from '../services/recaptcha.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { websiteRegisterSchema, websiteLoginSchema, websiteResendSchema, websiteVerifySchema } from '../validation/doctorAuth.schemas.js';
+import { websiteForgotPasswordSchema, websiteLoginWithRecaptchaSchema, websiteRegisterWithRecaptchaSchema, websiteResendSchema, websiteResetPasswordSchema, websiteVerifySchema } from '../validation/doctorAuth.schemas.js';
 
 export const doctorAuthRouter = Router();
 const cookieName = 'antartalk_doctor_refresh';
@@ -27,12 +28,26 @@ doctorAuthRouter.use((req, res, next) => {
   if (origin && !env.CORS_ORIGINS.includes(origin)) return next(new AppError(403, 'ORIGIN_REQUIRED', 'Use the configured doctor website origin.'));
   next();
 }, authLimiter, accountAuthLimiter);
-doctorAuthRouter.post('/register', otpLimiter, validate(websiteRegisterSchema), asyncHandler(async (req, res) => res.status(201).json({ success: true, data: await registerWebsiteDoctor(req.body, { ip: req.ip }) })));
+doctorAuthRouter.get('/recaptcha-config', (_req, res) => res.json({ success: true, data: recaptchaConfiguration() }));
+doctorAuthRouter.post('/register', otpLimiter, validate(websiteRegisterWithRecaptchaSchema), asyncHandler(async (req, res) => {
+  await verifyRecaptcha(req.body.recaptchaToken, 'doctor_register');
+  res.status(201).json({ success: true, data: await registerWebsiteDoctor(req.body, { ip: req.ip }) });
+}));
 
 doctorAuthRouter.get('/me', authenticateUser, requireWebsiteUser, asyncHandler(async (req, res) => res.json({ success: true, data: { id: req.user.id, role: req.user.role } })));
-doctorAuthRouter.post('/login', otpLimiter, validate(websiteLoginSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await beginDoctorLogin(req.body) })));
+doctorAuthRouter.post('/login', otpLimiter, validate(websiteLoginWithRecaptchaSchema), asyncHandler(async (req, res) => {
+  await verifyRecaptcha(req.body.recaptchaToken, 'doctor_login');
+  res.json({ success: true, data: await beginDoctorLogin(req.body) });
+}));
 doctorAuthRouter.post('/send-otp', otpLimiter, validate(websiteResendSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await sendDoctorOtp(req.body) })));
 doctorAuthRouter.post('/verify-otp', validate(websiteVerifySchema), asyncHandler(async (req, res) => sendTokens(res, await verifyDoctorOtp(req.body, { ip: req.ip }))));
+doctorAuthRouter.post('/forgot-password', otpLimiter, validate(websiteForgotPasswordSchema), asyncHandler(async (req, res) => {
+  await verifyRecaptcha(req.body.recaptchaToken, 'doctor_forgot_password');
+  res.json({ success: true, data: await requestDoctorPasswordReset(req.body) });
+}));
+doctorAuthRouter.post('/reset-password', otpLimiter, validate(websiteResetPasswordSchema), asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await resetDoctorPassword(req.body, { ip: req.ip }) });
+}));
 doctorAuthRouter.post('/refresh', asyncHandler(async (req, res) => {
   const token = readCookie(req);
   if (!token) throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Sign in to continue.');

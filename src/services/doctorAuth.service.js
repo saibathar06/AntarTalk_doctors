@@ -5,7 +5,7 @@ import { env } from '../config/env.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { AppError } from '../errors/AppError.js';
-import { consumeOtp, createOtp, issueTokens, registerDoctor } from './auth.service.js';
+import { consumeOtp, createOtp, issueTokens, registerDoctor, forgotPassword, resetPassword } from './auth.service.js';
 import { lockUser } from './transaction.service.js';
 import { recordAudit } from './audit.service.js';
 
@@ -101,4 +101,16 @@ export async function verifyDoctorOtp({ challengeToken, otp }, context = {}) {
   });
   if (outcome instanceof AppError) throw outcome;
   return issueTokens(outcome);
+}
+
+// Generic responses prevent password-reset email enumeration. The existing
+// RESET_PASSWORD OTP purpose supplies hashing, expiry, cooldown and replay protection.
+export async function requestDoctorPasswordReset({ email }) {
+  await forgotPassword({ email }, ['DOCTOR', 'ADMIN']);
+  return { sent: true, message: 'If an eligible account exists for that email, a password-reset code has been sent.' };
+}
+
+export async function resetDoctorPassword({ email, otp, newPassword }, context = {}) {
+  await resetPassword({ email, otp, newPassword }, context, ['DOCTOR', 'ADMIN']);
+  return { reset: true, message: 'Password changed successfully. Sign in with your new password.' };
 }

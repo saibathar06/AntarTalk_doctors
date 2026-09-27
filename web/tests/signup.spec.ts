@@ -1,11 +1,15 @@
 import { test, expect } from "@playwright/test";
-import { websiteRegisterSchema } from "../../src/validation/doctorAuth.schemas.js";
+import { websiteRegisterWithRecaptchaSchema } from "../../src/validation/doctorAuth.schemas.js";
 
 for (const scenario of ["success", "gateway", "email"] as const) {
   test(`signup contract and ${scenario} handling without real account creation`, async ({
     page,
   }) => {
     let registrations = 0;
+    await page.route("https://www.google.com/recaptcha/api.js?render=explicit", (route) => route.fulfill({
+      contentType: "application/javascript",
+      body: "window.grecaptcha={render:(element,options)=>{setTimeout(()=>options.callback('test-recaptcha-token'),0);return 1},reset:()=>{}};",
+    }));
     await page.route("**/api/**", async (route) => {
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith("/refresh"))
@@ -16,6 +20,7 @@ for (const scenario of ["success", "gateway", "email"] as const) {
             error: { code: "INVALID_REFRESH_TOKEN", message: "Sign in" },
           },
         });
+      if (path.endsWith("/recaptcha-config")) return route.fulfill({ json: { success: true, data: { enabled: true, siteKey: "test-site-key" } } });
       if (!path.endsWith("/register"))
         return route.fulfill({
           status: 500,
@@ -26,7 +31,7 @@ for (const scenario of ["success", "gateway", "email"] as const) {
         });
       registrations++;
       const body = route.request().postDataJSON();
-      expect(websiteRegisterSchema.safeParse({ body }).success).toBe(true);
+      expect(websiteRegisterWithRecaptchaSchema.safeParse({ body }).success).toBe(true);
       expect(Object.keys(body).sort()).toEqual([
         "dateOfBirth",
         "email",
@@ -36,6 +41,7 @@ for (const scenario of ["success", "gateway", "email"] as const) {
         "password",
         "phoneNumber",
         "professionalCategory",
+        "recaptchaToken",
         "timezone",
       ]);
       if (scenario === "gateway")

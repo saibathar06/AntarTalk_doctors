@@ -225,16 +225,16 @@ export async function logout(userId, { refreshToken, allDevices }, context = {})
   });
 }
 
-export async function forgotPassword({ email }) {
+export async function forgotPassword({ email }, allowedRoles = null) {
   const user = await prisma.user.findUnique({ where: { email } });
-  if (user?.accountStatus === 'ACTIVE') {
+  if (user?.accountStatus === 'ACTIVE' && (!allowedRoles || allowedRoles.includes(user.role))) {
     await createOtp(user, 'RESET_PASSWORD');
   }
 }
 
-export async function resetPassword({ email, otp, newPassword }, context = {}) {
+export async function resetPassword({ email, otp, newPassword }, context = {}, allowedRoles = null) {
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || user.accountStatus !== 'ACTIVE') throw new AppError(400, 'INVALID_OTP', 'The verification code is invalid or expired.');
+  if (!user || user.accountStatus !== 'ACTIVE' || (allowedRoles && !allowedRoles.includes(user.role))) throw new AppError(400, 'INVALID_OTP', 'The verification code is invalid or expired.');
   const passwordHash = await argon2.hash(newPassword, passwordOptions);
   const outcome = await prisma.$transaction(async (tx) => {
     const fresh = await lockUser(tx, user.id);
@@ -246,4 +246,21 @@ export async function resetPassword({ email, otp, newPassword }, context = {}) {
     await recordAudit({ actorId: user.id, action: 'PASSWORD_RESET', entityType: 'User', entityId: user.id, ipAddress: context.ip }, tx);
   });
   if (outcome instanceof AppError) throw outcome;
+}
+
+export async function changePassword(userId, { currentPassword, newPassword }, context = {}) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || user.accountStatus !== 'ACTIVE') throw new AppError(401, 'SESSION_REVOKED', 'Sign in again.');
+  const currentMatches = await argon2.verify(user.passwordHash, currentPassword).catch(() => false);
+  if (!currentMatches) throw new AppError(401, 'CURRENT_PASSWORD_INCORRECT', 'Your current password is incorrect.');
+  const samePassword = await argon2.verify(user.passwordHash, newPassword).catch(() => false);
+  if (samePassword) throw new AppError(422, 'PASSWORD_UNCHANGED', 'Your new password must be different from your current password.');
+  const passwordHash = await argon2.hash(newPassword, passwordOptions);
+  await prisma.$transaction(async (tx) => {
+    await lockUser(tx, userId);
+    await tx.user.update({ where: { id: userId }, data: { passwordHash, tokenVersion: { increment: 1 } } });
+    await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+    await tx.otpChallenge.updateMany({ where: { userId, consumedAt: null }, data: { consumedAt: new Date() } });
+    await recordAudit({ actorId: userId, action: 'PASSWORD_CHANGED', entityType: 'User', entityId: userId, ipAddress: context.ip }, tx);
+  });
 }

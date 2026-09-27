@@ -16,3 +16,22 @@ export const confirmSchema = z.object({
   headers: z.object({ 'idempotency-key': z.string().min(8).max(128) }).passthrough(),
   body: z.object({ reservationId: uuid, doctorId: uuid, startTime: isoDateTime, paymentId: uuid })
 });
+
+export const razorpayOrderSchema = z.object({ body: z.object({
+  reservationId: uuid,
+  doctorId: uuid,
+  startTime: isoDateTime
+}).strict() });
+
+export const razorpayVerifySchema = z.object({
+  headers: z.object({ 'idempotency-key': z.string().min(8).max(128) }).passthrough(),
+  body: z.object({
+    reservationId: uuid,
+    doctorId: uuid,
+    startTime: isoDateTime,
+    paymentId: uuid,
+    razorpayOrderId: z.string().trim().min(3).max(200),
+    razorpayPaymentId: z.string().trim().min(3).max(200),
+    razorpaySignature: z.string().regex(/^[a-f0-9]{64}$/i)
+  }).strict()
+});

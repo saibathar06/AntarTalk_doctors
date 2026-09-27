@@ -27,6 +27,24 @@ type LoginResponse = {
   user: { id: string; email: string; role: string };
   tokens: { accessToken: string; refreshToken: string };
 };
+type RazorpayOrder = { paymentId: string; keyId: string; orderId: string; amount: number; currency: string; doctorName: string; expiresAt: string };
+type RazorpaySuccess = { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string };
+type RazorpayCheckout = { open: () => void };
+declare global { interface Window { Razorpay?: new (options: Record<string, unknown>) => RazorpayCheckout } }
+
+let razorpayScript: Promise<void> | null = null;
+function loadRazorpay() {
+  if (window.Razorpay) return Promise.resolve();
+  if (!razorpayScript) razorpayScript = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => window.Razorpay ? resolve() : reject(new Error("Razorpay checkout did not load."));
+    script.onerror = () => reject(new Error("Unable to load secure payment checkout."));
+    document.head.append(script);
+  });
+  return razorpayScript;
+}
 
 const iso = (date: DateTime) => date.toUTC().toISO()!;
 const dateKey = (value: string, zone: string) =>
@@ -126,9 +144,8 @@ export function BookSessionPage() {
   const [clientSession, setClientSession] = useState<ClientSession | null>(null);
   const [reservation, setReservation] = useState<SlotReservation | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
-  const [paymentId, setPaymentId] = useState("");
   const [booking, setBooking] = useState<ClientBooking | null>(null);
-  const [busy, setBusy] = useState<"reserve" | "confirm" | null>(null);
+  const [busy, setBusy] = useState<"reserve" | "payment" | "confirm" | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [confirmationKey, setConfirmationKey] = useState("");
@@ -194,7 +211,6 @@ export function BookSessionPage() {
       if (seconds === 0) {
         setReservation(null);
         setSelectedSlot(null);
-        setPaymentId("");
         setNotice("Your reservation expired. Live availability has been refreshed.");
         setSlotsVersion((value) => value + 1);
       }
@@ -228,23 +244,26 @@ export function BookSessionPage() {
     }
   }
 
-  async function confirm() {
-    if (!reservation || !clientSession || !paymentId.trim()) return;
+  async function confirmPaidPayment(order: RazorpayOrder, result: RazorpaySuccess) {
+    if (!reservation || !clientSession) return;
     setBusy("confirm");
     setError("");
     setNotice("");
     try {
-      const result = await apiWithAccessToken<ClientBooking>("/api/bookings/confirm", clientSession.accessToken, {
+      const confirmedBooking = await apiWithAccessToken<ClientBooking>("/api/bookings/razorpay/verify", clientSession.accessToken, {
         method: "POST",
         headers: { "Idempotency-Key": confirmationKey },
         body: JSON.stringify({
           reservationId: reservation.reservationId,
           doctorId: reservation.slot.doctorId,
           startTime: reservation.slot.startTime,
-          paymentId: paymentId.trim(),
+          paymentId: order.paymentId,
+          razorpayOrderId: result.razorpay_order_id,
+          razorpayPaymentId: result.razorpay_payment_id,
+          razorpaySignature: result.razorpay_signature,
         }),
       });
-      setBooking(result);
+      setBooking(confirmedBooking);
       setReservation(null);
       setSlotsVersion((value) => value + 1);
     } catch (requestError) {
@@ -256,6 +275,38 @@ export function BookSessionPage() {
         setSlotsVersion((value) => value + 1);
       }
     } finally {
+      setBusy(null);
+    }
+  }
+
+  async function startPayment() {
+    if (!reservation || !clientSession) return;
+    setBusy("payment");
+    setError("");
+    setNotice("");
+    try {
+      const order = await apiWithAccessToken<RazorpayOrder>("/api/bookings/razorpay/order", clientSession.accessToken, {
+        method: "POST",
+        body: JSON.stringify({ reservationId: reservation.reservationId, doctorId: reservation.slot.doctorId, startTime: reservation.slot.startTime }),
+      });
+      await loadRazorpay();
+      if (!window.Razorpay) throw new Error("Secure payment checkout is unavailable.");
+      const checkout = new window.Razorpay({
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency,
+        name: "AntarTalk",
+        description: `Session with Dr. ${order.doctorName}`,
+        order_id: order.orderId,
+        prefill: { email: clientSession.email },
+        theme: { color: "#f7256f" },
+        modal: { ondismiss: () => { setNotice("Payment was not completed. Your slot remains held until the timer expires."); setBusy(null); } },
+        handler: (result: RazorpaySuccess) => { void confirmPaidPayment(order, result); },
+      });
+      setBusy(null);
+      checkout.open();
+    } catch (requestError) {
+      setError((requestError as Error).message);
       setBusy(null);
     }
   }
@@ -351,12 +402,8 @@ export function BookSessionPage() {
         <section className="booking-payment card">
           <div className="booking-section-heading"><div><p className="eyebrow">PAYMENT STEP</p><h2>Your session is temporarily held</h2></div><span className="reservation-clock" aria-live="polite">{minutes}</span></div>
           <p>The hold is owned by your client account and expires at the server-provided time. Keep this page open while completing payment.</p>
-          <div className="payment-test-note"><CreditCardIcon /><div><strong>Development payment handoff</strong><p>No public payment provider/order endpoint exists in this backend. Use the payment ID from a successful trusted test payment that is bound to this exact doctor and appointment window.</p></div></div>
-          <label>
-            Successful payment ID
-            <input value={paymentId} onChange={(event) => setPaymentId(event.target.value)} placeholder="Payment ID from the trusted test integration" autoComplete="off" />
-          </label>
-          <button className="button" disabled={busy === "confirm" || !paymentId.trim()} onClick={confirm}>{busy === "confirm" ? "Confirming booking…" : "Confirm paid booking"}</button>
+          <div className="payment-test-note"><CreditCardIcon /><div><strong>Secure Razorpay checkout</strong><p>Your session fee is collected in INR. The consultation fee is shown before payment; AntarTalk’s commission is handled securely on the server.</p></div></div>
+          <button className="button" disabled={busy === "payment" || busy === "confirm"} onClick={startPayment}>{busy === "payment" ? "Opening secure checkout…" : busy === "confirm" ? "Confirming booking…" : "Pay securely with Razorpay"}</button>
         </section>
       )}
 
@@ -374,7 +421,7 @@ export function BookSessionPage() {
         {!reservation && <button className="button full" disabled={!selectedSlot || !clientSession || busy === "reserve"} onClick={reserve}>{busy === "reserve" ? "Reserving session…" : "Book session"}</button>}
         {!clientSession && <p className="help">Sign in with a verified client account to reserve this time.</p>}
       </aside>}
-      {busy && <TransitionLoader label={busy === "reserve" ? "Reserving your session…" : "Confirming your booking…"} />}
+      {busy && <TransitionLoader label={busy === "reserve" ? "Reserving your session…" : busy === "payment" ? "Preparing secure payment…" : "Confirming your booking…"} />}
     </main>
   );
 }

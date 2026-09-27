@@ -38,6 +38,24 @@ EMAIL_FROM=verified-sender@your-domain.com
 
 Port `2525` with `SMTP_SECURE=false` is also supported by Brevo. `EMAIL_FROM` must be a Brevo-verified sender. Production refuses to start with missing SMTP credentials; development may use a local SMTP server. Never put these values in `web/.env.local`.
 
+### reCAPTCHA and Razorpay
+
+Set these **backend-only** values in Render/local API configuration before using the new authentication and payment screens. Do not add them to `web/.env.local` or commit them.
+
+```env
+RECAPTCHA_SITE_KEY=your-google-checkbox-site-key
+RECAPTCHA_SECRET_KEY=your-google-checkbox-secret
+RAZORPAY_KEY_ID=your-razorpay-test-key-id
+RAZORPAY_KEY_SECRET=your-razorpay-test-key-secret
+RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
+RAZORPAY_CURRENCY=INR
+PLATFORM_COMMISSION_PERCENT=20
+```
+
+The public site key is returned only by `GET /api/doctor/auth/recaptcha-config`; the secret is verified server-side with Google. Registration, password login, and forgotten-password requests require the checkbox. OTP resend relies on its existing signed challenge, cooldown and rate limits.
+
+Razorpay orders are created by the API from the doctor’s stored `consultationFee`; clients never submit an amount or commission. The server verifies the returned checkout signature and captured payment before it confirms the existing Redis-held booking. Configure a Razorpay webhook at `POST /api/payments/razorpay/webhook` with the same webhook secret. The webhook is signed and records capture status, but it never creates a booking by itself.
+
 ## How it works
 
 - Signup collects first name, last name, email, password and core professional details. Login requires email + password, followed by an email OTP. Passwords use Argon2id hashes. Deploy the backend and website together for this updated contract.
@@ -62,7 +80,7 @@ Provision the first ADMIN account through your controlled database/admin process
 
 ## Boundaries
 
-No real video/payment/payout provider, ratings, SMS or appointment-notification worker is connected. Join returns backend authorization, not a video meeting URL. Financial records are retained on account deletion; unresolved active bookings prevent deletion. New uploads are private and ownership-checked.
+No real video or payout provider, ratings, SMS or appointment-notification worker is connected. Razorpay is connected for INR checkout once its environment keys and webhook are configured. Join returns backend authorization, not a video meeting URL. Financial records are retained on account deletion; unresolved active bookings prevent deletion. New uploads are private and ownership-checked.
 
 See [website handoff](docs/DOCTOR_WEBSITE.md) for routes, API contracts, environment variables, migration details, changed files and rollout assumptions. Existing backend details: [API changes](docs/API_CHANGES.md), [hardening report](docs/HARDENING_REPORT.md).
 

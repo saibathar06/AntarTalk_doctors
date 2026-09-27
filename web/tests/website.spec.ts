@@ -92,6 +92,13 @@ test("client booking uses the live slot, reservation, and confirmation contracts
   const end = new Date(new Date(start).getTime() + 60 * 60_000).toISOString();
   let reservationRequest: unknown;
   let confirmationRequest: unknown;
+  await page.addInitScript(() => {
+    window.Razorpay = class {
+      // @ts-expect-error Test checkout accepts the production options shape.
+      constructor(private options: { handler: (result: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => void }) {}
+      open() { this.options.handler({ razorpay_payment_id: "pay_test", razorpay_order_id: "order_test", razorpay_signature: "a".repeat(64) }); }
+    };
+  });
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === `/api/bookings/doctors/${doctorId}`) {
@@ -160,7 +167,10 @@ test("client booking uses the live slot, reservation, and confirmation contracts
         },
       });
     }
-    if (url.pathname === "/api/bookings/confirm") {
+    if (url.pathname === "/api/bookings/razorpay/order") {
+      return route.fulfill({ status: 201, json: { success: true, data: { paymentId: "44444444-4444-4444-8444-444444444444", keyId: "rzp_test_key", orderId: "order_test", amount: 120000, currency: "INR", doctorName: "Asha Sharma", expiresAt: new Date(Date.now() + 180_000).toISOString() } } });
+    }
+    if (url.pathname === "/api/bookings/razorpay/verify") {
       confirmationRequest = route.request().postDataJSON();
       expect(route.request().headers()["idempotency-key"]).toHaveLength(36);
       return route.fulfill({
@@ -194,16 +204,18 @@ test("client booking uses the live slot, reservation, and confirmation contracts
   await page.getByRole("button", { name: "Sign in to book" }).click();
   await page.getByRole("button", { name: /Available/ }).click();
   await page.getByRole("button", { name: "Book session" }).click();
-  await expect(page.getByText("Development payment handoff")).toBeVisible();
+  await expect(page.getByText("Secure Razorpay checkout")).toBeVisible();
   expect(reservationRequest).toEqual({ doctorId, startTime: start });
-  await page.getByLabel("Successful payment ID").fill("44444444-4444-4444-8444-444444444444");
-  await page.getByRole("button", { name: "Confirm paid booking" }).click();
+  await page.getByRole("button", { name: "Pay securely with Razorpay" }).click();
   await expect(page.getByRole("heading", { name: "Session booked successfully" })).toBeVisible();
   expect(confirmationRequest).toEqual({
     reservationId: "22222222-2222-4222-8222-222222222222",
     doctorId,
     startTime: start,
     paymentId: "44444444-4444-4444-8444-444444444444",
+    razorpayOrderId: "order_test",
+    razorpayPaymentId: "pay_test",
+    razorpaySignature: "a".repeat(64),
   });
 });
 test("real empty states, profile completion, navigation and responsive layout", async ({
