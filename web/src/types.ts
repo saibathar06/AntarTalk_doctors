@@ -62,8 +62,8 @@ export interface VerificationRequest {
   profileImageUrl: string | null;
   licenseDocumentUrl: string | null;
   hasLicenseDocument: boolean;
-  verificationStatus: "PENDING";
-  verificationSubmittedAt: string;
+  verificationStatus: "PENDING" | "VERIFIED" | "REJECTED" | "SUSPENDED";
+  verificationSubmittedAt: string | null;
   verificationReason: string | null;
   isAcceptingBookings: false;
   updatedAt: string;
@@ -129,4 +129,45 @@ export interface Earning {
   amount: string;
   currency: string;
   status: string;
+}
+export interface BookableDoctor {
+  id: string;
+  firstName: string;
+  lastName: string;
+  professionalCategory: string;
+  specialization: string | null;
+  qualification: string | null;
+  institution: string | null;
+  experienceYears: number | null;
+  preferredSessionLanguage: string | null;
+  languages: string[];
+  bio: string | null;
+  timezone: string;
+  verificationStatus: "VERIFIED";
+  hasProfileImage: boolean;
+  consultationFee: string | null;
+}
+export interface BookingSlot {
+  doctorId: string;
+  startTime: string;
+  endTime: string;
+  sessionDurationMinutes: number;
+  bufferDurationMinutes: number;
+}
+export interface SlotReservation {
+  reservationId: string;
+  expiresAt: string;
+  slot: BookingSlot;
+}
+export interface ClientBooking {
+  id: string;
+  doctorId: string;
+  clientId: string;
+  startTime: string;
+  endTime: string;
+  sessionDurationMinutes: number;
+  bufferDurationMinutes: number;
+  status: "CONFIRMED" | string;
+  paymentId: string | null;
+  createdAt: string;
 }

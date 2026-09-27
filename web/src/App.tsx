@@ -34,6 +34,7 @@ import { ProfilePage } from "./pages/ProfilePage";
 import { AvailabilityPage } from "./pages/AvailabilityPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { AdminVerificationPage } from "./pages/AdminVerificationPage";
+import { BookSessionPage } from "./pages/BookSessionPage";
 
 const links = [
   ["dashboard", "Dashboard", HouseIcon],
@@ -174,6 +175,7 @@ function AdminLayout() {
 export function App() {
   return (
     <Routes>
+      <Route path="/book-session/:doctorId" element={<BookSessionPage />} />
       <Route path="/doctor/login" element={<AuthPage mode="login" />} />
       <Route path="/doctor/register" element={<AuthPage mode="register" />} />
       <Route path="/doctor/verify" element={<AuthPage mode="verify" />} />

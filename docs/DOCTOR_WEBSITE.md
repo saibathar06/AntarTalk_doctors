@@ -114,10 +114,12 @@ Doctors explicitly submit a complete profile with `POST /api/doctor/verification
 | --- | --- | --- |
 | GET `/api/admin/verification-requests?page=1&limit=25` | ADMIN | Submitted PENDING review queue only |
 | GET `/api/admin/verification-requests/:id` | ADMIN | One submitted profile’s review-safe professional details |
-| GET `/api/admin/doctors/:id/license-document` | ADMIN | Credential attachment for an actively submitted review only; authenticated download |
+| GET `/api/admin/doctors?page=1&limit=25&status?` | ADMIN | Paginated doctor directory; optional verification status filter |
+| GET `/api/admin/doctors/:id` | ADMIN | One doctor’s professional profile, never client or clinical data |
+| GET `/api/admin/doctors/:id/license-document` | ADMIN | Attached credential document for a doctor profile; authenticated download |
 | PATCH `/api/admin/doctors/:id/verification` | ADMIN | Body `{status: "VERIFIED" | "REJECTED", expectedUpdatedAt, reason?}`; rejection requires a reason |
 
-The decision endpoint locks the doctor profile and rejects a stale browser decision with `409 VERIFICATION_REQUEST_CHANGED` if the profile changed after it was opened. Every submit, approval and rejection creates an audit log. Approval sets `VERIFIED` but leaves `isAcceptingBookings: false`; the doctor has to opt in after approval. Rejection stores the reason for the doctor and leaves bookings off.
+The decision endpoint locks the doctor profile and rejects a stale browser decision with `409 VERIFICATION_REQUEST_CHANGED` if the profile changed after it was opened. Every submit, approval and rejection creates an audit log. Approval sets `VERIFIED` but leaves `isAcceptingBookings: false`; the doctor has to opt in after approval. Rejection stores the reason for the doctor and leaves bookings off. The directory lets an administrator inspect professional information and retrieve an attached credential document, but does not expose client or clinical records.
 
 ### Workspace reads
 

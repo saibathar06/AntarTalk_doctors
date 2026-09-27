@@ -30,6 +30,21 @@ export async function listVerificationQueue({ page, limit }) {
   return { items: items.map(serialize), pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
 }
 
+export async function listDoctors({ page, limit, status }) {
+  const where = status ? { verificationStatus: status } : undefined;
+  const [items, total] = await Promise.all([
+    prisma.doctorProfile.findMany({ where, select: reviewSelect, orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }], skip: (page - 1) * limit, take: limit }),
+    prisma.doctorProfile.count({ where })
+  ]);
+  return { items: items.map(serialize), pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
+}
+
+export async function getDoctorForAdmin(id) {
+  const profile = await prisma.doctorProfile.findUnique({ where: { id }, select: reviewSelect });
+  if (!profile) throw new AppError(404, 'DOCTOR_NOT_FOUND', 'Doctor profile not found.');
+  return serialize(profile);
+}
+
 export async function getVerificationReview(id) {
   const profile = await prisma.doctorProfile.findFirst({ where: { id, ...submittedWhere }, select: reviewSelect });
   if (!profile) throw new AppError(404, 'VERIFICATION_REQUEST_NOT_FOUND', 'This verification request is no longer awaiting review.');

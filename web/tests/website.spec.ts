@@ -84,6 +84,128 @@ test("OTP entry and browser-protected navigation", async ({ page }) => {
     ),
   ).toBe(true);
 });
+test("client booking uses the live slot, reservation, and confirmation contracts", async ({
+  page,
+}) => {
+  const doctorId = "11111111-1111-4111-8111-111111111111";
+  const start = new Date(Date.now() + 2 * 86_400_000).toISOString();
+  const end = new Date(new Date(start).getTime() + 60 * 60_000).toISOString();
+  let reservationRequest: unknown;
+  let confirmationRequest: unknown;
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === `/api/bookings/doctors/${doctorId}`) {
+      return route.fulfill({
+        json: {
+          success: true,
+          data: {
+            id: doctorId,
+            firstName: "Asha",
+            lastName: "Sharma",
+            professionalCategory: "PSYCHOLOGIST",
+            specialization: "Anxiety care",
+            qualification: "MSc Psychology",
+            institution: "Test University",
+            experienceYears: 7,
+            preferredSessionLanguage: "English",
+            languages: ["English"],
+            bio: "Public profile.",
+            timezone: "Asia/Kolkata",
+            verificationStatus: "VERIFIED",
+            hasProfileImage: false,
+            consultationFee: "1200.00",
+          },
+        },
+      });
+    }
+    if (url.pathname === "/api/bookings/availability") {
+      return route.fulfill({
+        json: {
+          success: true,
+          data: [
+            {
+              doctorId,
+              startTime: start,
+              endTime: end,
+              sessionDurationMinutes: 40,
+              bufferDurationMinutes: 20,
+            },
+          ],
+        },
+      });
+    }
+    if (url.pathname === "/api/auth/login") {
+      return route.fulfill({
+        json: {
+          success: true,
+          data: {
+            user: { id: "client-id", email: "client@example.test", role: "CLIENT" },
+            tokens: { accessToken: "client-token", refreshToken: "x".repeat(48) },
+          },
+        },
+      });
+    }
+    if (url.pathname === "/api/bookings/reserve") {
+      reservationRequest = route.request().postDataJSON();
+      expect(route.request().headers().authorization).toBe("Bearer client-token");
+      return route.fulfill({
+        status: 201,
+        json: {
+          success: true,
+          data: {
+            reservationId: "22222222-2222-4222-8222-222222222222",
+            expiresAt: new Date(Date.now() + 180_000).toISOString(),
+            slot: { doctorId, startTime: start, endTime: end, sessionDurationMinutes: 40, bufferDurationMinutes: 20 },
+          },
+        },
+      });
+    }
+    if (url.pathname === "/api/bookings/confirm") {
+      confirmationRequest = route.request().postDataJSON();
+      expect(route.request().headers()["idempotency-key"]).toHaveLength(36);
+      return route.fulfill({
+        status: 201,
+        json: {
+          success: true,
+          data: {
+            id: "33333333-3333-4333-8333-333333333333",
+            doctorId,
+            clientId: "client-id",
+            startTime: start,
+            endTime: end,
+            sessionDurationMinutes: 40,
+            bufferDurationMinutes: 20,
+            status: "CONFIRMED",
+            paymentId: "44444444-4444-4444-8444-444444444444",
+            createdAt: new Date().toISOString(),
+          },
+        },
+      });
+    }
+    return route.fulfill({
+      status: 500,
+      json: { success: false, error: { code: "UNEXPECTED", message: "Unexpected test request" } },
+    });
+  });
+  await page.goto(`/book-session/${doctorId}`);
+  await expect(page.getByRole("heading", { name: "Dr. Asha Sharma" })).toBeVisible();
+  await page.getByLabel("Client email").fill("client@example.test");
+  await page.getByLabel("Password").fill("TestPassword123!");
+  await page.getByRole("button", { name: "Sign in to book" }).click();
+  await page.getByRole("button", { name: /Available/ }).click();
+  await page.getByRole("button", { name: "Book session" }).click();
+  await expect(page.getByText("Development payment handoff")).toBeVisible();
+  expect(reservationRequest).toEqual({ doctorId, startTime: start });
+  await page.getByLabel("Successful payment ID").fill("44444444-4444-4444-8444-444444444444");
+  await page.getByRole("button", { name: "Confirm paid booking" }).click();
+  await expect(page.getByRole("heading", { name: "Session booked successfully" })).toBeVisible();
+  expect(confirmationRequest).toEqual({
+    reservationId: "22222222-2222-4222-8222-222222222222",
+    doctorId,
+    startTime: start,
+    paymentId: "44444444-4444-4444-8444-444444444444",
+  });
+});
 test("real empty states, profile completion, navigation and responsive layout", async ({
   page,
 }) => {
@@ -225,8 +347,8 @@ test("admin sees only the verification queue and can reject with a reason", asyn
     preferredSessionLanguage: "English",
     expertise: ["Anxiety"],
     profileImageUrl: null,
-    licenseDocumentUrl: null,
-    hasLicenseDocument: false,
+    licenseDocumentUrl: "/uploads/credentials/review-doctor.pdf",
+    hasLicenseDocument: true,
     verificationStatus: "PENDING",
     verificationSubmittedAt: "2030-01-01T10:00:00Z",
     verificationReason: null,
@@ -259,6 +381,12 @@ test("admin sees only the verification queue and can reject with a reason", asyn
       decision = route.request().postDataJSON();
       return route.fulfill({ json: { success: true, data: {} } });
     }
+    if (url.pathname.endsWith("/license-document")) {
+      return route.fulfill({
+        contentType: "application/pdf",
+        body: "%PDF-1.4 test credential document",
+      });
+    }
     return route.fulfill({
       status: 500,
       json: { success: false, error: { message: "Unexpected test request" } },
@@ -266,6 +394,12 @@ test("admin sees only the verification queue and can reject with a reason", asyn
   });
   await page.goto("/doctor/admin");
   await page.getByRole("button", { name: "Review Doctor" }).click();
+  const download = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "Download credential document" })
+    .click();
+  expect((await download).suggestedFilename()).toBe("credential-document.pdf");
+  await expect(page.getByText("Credential document download started.")).toBeVisible();
   await page
     .getByLabel("Rejection reason")
     .fill("Please upload a current license document.");

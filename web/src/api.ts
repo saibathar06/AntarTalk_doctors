@@ -82,6 +82,26 @@ export async function api<T>(
 ): Promise<T> {
   return (await (await request(path, options)).json()).data;
 }
+
+// Client booking keeps its own in-memory token flow. It must never trigger the
+// Doctors-app refresh endpoint or persist a client token in browser storage.
+export async function apiWithAccessToken<T>(
+  path: string,
+  accessToken: string | null,
+  options: RequestInit = {},
+): Promise<T> {
+  const headers = new Headers(options.headers);
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  if (options.body && !(options.body instanceof FormData))
+    headers.set("Content-Type", "application/json");
+  const response = await fetchApi(path, {
+    ...options,
+    headers,
+    credentials: "same-origin",
+  });
+  if (!response.ok) throw await responseError(response);
+  return (await response.json()).data;
+}
 export const mutate = <T>(path: string, method: string, body: unknown) =>
   api<T>(path, { method, body: JSON.stringify(body) });
 export async function fileUrl(path: string) {

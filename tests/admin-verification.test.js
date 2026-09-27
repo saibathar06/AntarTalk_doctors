@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../src/lib/prisma.js', () => ({ prisma: {} }));
 import { prisma } from '../src/lib/prisma.js';
-import { decideVerification, listVerificationQueue } from '../src/services/adminVerification.service.js';
+import { decideVerification, listDoctors, listVerificationQueue } from '../src/services/adminVerification.service.js';
 
 const admin = { id: '12345678-1234-4234-8234-123456789abc', role: 'ADMIN', accountStatus: 'ACTIVE' };
 let profile;
@@ -20,7 +20,7 @@ beforeEach(() => {
     $transaction: vi.fn(async (work) => work(prisma)),
     user: { findUnique: vi.fn(async () => admin) },
     doctorProfile: {
-      findMany: vi.fn(async () => [profile]), count: vi.fn(async () => 1), findFirst: vi.fn(async () => profile),
+      findMany: vi.fn(async () => [profile]), count: vi.fn(async () => 1), findFirst: vi.fn(async () => profile), findUnique: vi.fn(async () => profile),
       update: vi.fn(async ({ data }) => ({ ...profile, ...data }))
     },
     auditLog: { create: vi.fn() }
@@ -32,6 +32,12 @@ describe('admin verification queue', () => {
     const result = await listVerificationQueue({ page: 1, limit: 20 });
     expect(prisma.doctorProfile.findMany.mock.calls[0][0].where).toEqual({ verificationStatus: 'PENDING', verificationSubmittedAt: { not: null } });
     expect(result.items[0]).toMatchObject({ email: 'review@example.test', hasLicenseDocument: true });
+    expect(result.items[0]).not.toHaveProperty('user');
+  });
+  it('lists doctor profiles separately from the submitted verification queue', async () => {
+    const result = await listDoctors({ page: 1, limit: 20 });
+    expect(prisma.doctorProfile.findMany.mock.calls[0][0].where).toBeUndefined();
+    expect(result.items[0]).toMatchObject({ id: profile.id, verificationStatus: 'PENDING' });
     expect(result.items[0]).not.toHaveProperty('user');
   });
   it('rejects with a recorded reason, keeps bookings off, and records an audit event', async () => {

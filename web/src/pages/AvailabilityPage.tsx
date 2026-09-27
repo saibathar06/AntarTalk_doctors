@@ -14,14 +14,11 @@ import {
   useResource,
 } from "../components";
 import type { Block, WorkingHour } from "../types";
-const days = [
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
+
+const quickWindows = [
+  { label: "Morning", startTime: "09:00", endTime: "12:00" },
+  { label: "Afternoon", startTime: "13:00", endTime: "17:00" },
+  { label: "Evening", startTime: "18:00", endTime: "21:00" },
 ];
 export function AvailabilityPage() {
   const { profile, reload } = useAuth();
@@ -121,11 +118,37 @@ export function AvailabilityPage() {
       old.map((row, i) => (i === index ? { ...row, ...change } : row)),
     );
   }
+  function addWindow(dayOfWeek: number, startTime: string, endTime: string) {
+    setWindows((current) => {
+      if (
+        current.some(
+          (window) =>
+            window.dayOfWeek === dayOfWeek &&
+            window.startTime === startTime &&
+            window.endTime === endTime,
+        )
+      )
+        return current;
+      return [...current, { dayOfWeek, startTime, endTime, isActive: true }];
+    });
+  }
+  const zonedNow = DateTime.now().setZone(timezone);
+  const calendarZone = zonedNow.isValid ? timezone : profile!.timezone;
+  const today = DateTime.now().setZone(calendarZone).startOf("day");
+  const visibleDays = Array.from({ length: 7 }, (_, offset) => {
+    const date = today.plus({ days: offset });
+    return {
+      dayOfWeek: date.weekday,
+      dayName: date.toFormat("cccc"),
+      dateLabel: date.toFormat("ccc, d LLL"),
+      isToday: offset === 0,
+    };
+  });
   return (
     <>
       <PageHeader
         title="Your time. Your rhythm."
-        description="Set the recurring times clients can book, then protect specific time away without changing your weekly pattern."
+        description={`Today is ${today.toFormat("cccc, d LLLL yyyy")} in ${calendarZone}. Choose the times clients can book, then protect specific time away when needed.`}
       />
       <ErrorState message={error || hours.error || blocks.error} />
       {notice && (
@@ -136,10 +159,10 @@ export function AvailabilityPage() {
       <form className="card" onSubmit={save}>
         <fieldset disabled={busy || hours.loading || Boolean(hours.error)}>
           <div className="section-title">
-            <div>
-                <h2>Weekly availability</h2>
+              <div>
+                <h2>Your next seven days</h2>
                 <p>
-                 Add each recurring window you want clients to see. Multiple windows, late nights, and overnight hours are supported.
+                  Set the hours for each dated day below. They repeat every week on that weekday until you change them.
               </p>
             </div>
             <label>
@@ -160,16 +183,20 @@ export function AvailabilityPage() {
           {hours.loading ? (
             <LoadingState />
           ) : (
-            days.map((day, i) => (
-              <div className="day-row" key={day}>
-                <strong>{day}</strong>
+            visibleDays.map((day) => (
+              <section className={`day-row ${day.isToday ? "today" : ""}`} key={`${day.dayOfWeek}-${day.dateLabel}`}>
+                <div className="day-heading">
+                  <strong>{day.isToday ? "Today" : day.dayName}</strong>
+                  <span>{day.dateLabel}</span>
+                  <small>Repeats every {day.dayName}</small>
+                </div>
                 <div className="day-windows">
                   {windows.map(
                     (row, index) =>
-                      row.dayOfWeek === i + 1 && (
+                      row.dayOfWeek === day.dayOfWeek && (
                         <div className="time-window" key={index}>
                           <input
-                            aria-label={`${day} start`}
+                            aria-label={`${day.dayName} start`}
                             type="time"
                             value={row.startTime}
                             onChange={(e) =>
@@ -179,7 +206,7 @@ export function AvailabilityPage() {
                           />
                           <span>to</span>
                           <input
-                            aria-label={`${day} end`}
+                            aria-label={`${day.dayName} end`}
                             type="time"
                             value={row.endTime}
                             onChange={(e) =>
@@ -201,7 +228,7 @@ export function AvailabilityPage() {
                           <button
                             type="button"
                             className="icon-button"
-                            aria-label={`Remove ${day} window`}
+                            aria-label={`Remove ${day.dayName} window`}
                             onClick={() =>
                               setWindows(windows.filter((_, n) => n !== index))
                             }
@@ -211,29 +238,31 @@ export function AvailabilityPage() {
                         </div>
                       ),
                   )}
-                  {!windows.some((w) => w.dayOfWeek === i + 1) && (
-                    <span className="muted">Unavailable</span>
+                  {!windows.some((w) => w.dayOfWeek === day.dayOfWeek) && (
+                    <span className="muted">No time is available yet. Choose a quick period or add your own.</span>
                   )}
+                  <div className="quick-windows" aria-label={`${day.dayName} quick times`}>
+                    {quickWindows.map((window) => (
+                      <button
+                        className="quick-window"
+                        type="button"
+                        key={window.label}
+                        onClick={() => addWindow(day.dayOfWeek, window.startTime, window.endTime)}
+                      >
+                        {window.label} <small>{window.startTime}–{window.endTime}</small>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className="quick-window custom-window"
+                      aria-label={`Add ${day.dayName} window`}
+                      onClick={() => addWindow(day.dayOfWeek, "09:00", "12:00")}
+                    >
+                      <PlusIcon size={16} /> Add custom time
+                    </button>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label={`Add ${day} window`}
-                  onClick={() =>
-                    setWindows([
-                      ...windows,
-                      {
-                        dayOfWeek: i + 1,
-                        startTime: "09:00",
-                        endTime: "12:00",
-                        isActive: true,
-                      },
-                    ])
-                  }
-                >
-                  <PlusIcon />
-                </button>
-              </div>
+              </section>
             ))
           )}
           <div className="form-footer">

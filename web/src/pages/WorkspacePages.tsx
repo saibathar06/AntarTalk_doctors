@@ -43,13 +43,18 @@ export function DashboardPage() {
   const name = profile!.firstName
     ? `${profile!.professionalStatus === "FINAL_YEAR_STUDENT" ? "" : "Dr. "}${profile!.firstName}`
     : "welcome";
+  const profileUnderReview =
+    profile!.verificationStatus === "PENDING" &&
+    Boolean(profile!.verificationSubmittedAt);
   return (
     <>
       <PageHeader
         eyebrow="A LITTLE SPACE FOR YOUR PRACTICE"
         title={`${greeting}, ${name}.`}
         description={
-          resource.data
+          profileUnderReview
+            ? "Your profile is under review. Once approved, you can enable bookings and become eligible to take sessions."
+            : resource.data
             ? `You have ${resource.data.todaySessions} sessions today. Let's make room for meaningful conversations.`
             : "Your day, thoughtfully organized."
         }
@@ -60,7 +65,7 @@ export function DashboardPage() {
         </Link>
       </PageHeader>
       <ErrorState message={resource.error} />
-      <ProfileCompletionCard profile={profile!} />
+      {!profileUnderReview && !profile!.profileCompleted && <ProfileCompletionCard profile={profile!} />}
       {resource.loading ? (
         <LoadingState />
       ) : (

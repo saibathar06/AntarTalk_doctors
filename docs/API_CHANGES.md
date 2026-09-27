@@ -40,6 +40,16 @@ type JoinAccess = {
 
 AVAILABLE is derived from PostgreSQL schedules/blocks/bookings and Redis holds. Reserve uses atomic Redis NX+TTL and returns Redis-derived expiresAt. Holds bind reservationId, authenticated clientId, doctorId, exact start/end and expiration. Availability returns available windows only, with no reservation-owner disclosure.
 
+### Client booking test surface
+
+- `GET /api/bookings/doctors/:doctorId` returns only client-safe professional information for a currently bookable doctor. It does not expose contact details, DOB, license/enrollment numbers, private upload paths, client data, or financial records.
+- `GET /api/bookings/doctors/:doctorId/photo` returns that same bookable doctor's public profile photo when one exists.
+- `GET /api/bookings/availability?doctorId&from&to` remains the sole slot-generation endpoint. It returns only currently available UTC appointment windows, including the configured therapy and buffer durations. Blocked, booked, held, and past windows are intentionally omitted rather than labelled with another client's state.
+- `POST /api/bookings/reserve` requires a verified `CLIENT` access token and returns `{ reservationId, expiresAt, slot }`. `expiresAt` is calculated from Redis time; the client must not calculate the 180-second deadline itself.
+- `POST /api/bookings/confirm` requires a verified `CLIENT` token, a valid `Idempotency-Key`, the owned reservation, and an already-successful trusted payment record bound to the exact doctor/window. There is intentionally no public payment-status or test-payment endpoint.
+
+The website test page is `/book-session/:doctorId`. Its payment handoff accepts an ID from an external trusted test-payment/order integration and then calls the real confirmation endpoint. It does not create or mark payments successful.
+
 RESERVED → CONFIRMED creates a PostgreSQL booking and idempotency record in one serializable transaction. Ownership/deadline are checked again before commit; a deferred trigger compares expiration to PostgreSQL clock_timestamp(). Same-key concurrent requests serialize and replay the stored result. Idempotency rows are not automatically cleaned up.
 
 RESERVED → EXPIRED → AVAILABLE happens through Redis TTL removal, without a permanent EXPIRED row. The window must still be otherwise bookable. No early-release endpoint was added.

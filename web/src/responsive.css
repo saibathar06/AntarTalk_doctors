@@ -83,10 +83,8 @@
     margin-left: auto;
   }
   .day-row {
+    grid-template-columns: 125px minmax(0, 1fr);
     gap: 12px;
-  }
-  .day-row > strong {
-    width: 72px;
   }
   .time-window input[type="time"] {
     width: 115px;
@@ -116,6 +114,7 @@
   .profile-actions-buttons {
     justify-content: flex-start;
   }
+  .date-picker { grid-template-columns: repeat(7, minmax(0, 1fr)); }
 }
 @media (max-width: 600px) {
   .admin-topbar { align-items: center; }
@@ -217,10 +216,8 @@
     grid-template-columns: 1fr 1fr;
   }
   .day-row {
-    align-items: flex-start;
-  }
-  .day-row > strong {
-    padding-top: 10px;
+    grid-template-columns: 1fr;
+    gap: 10px;
   }
   .time-window {
     gap: 8px;
@@ -253,6 +250,12 @@
   .empty {
     padding: 35px 10px;
   }
+  .booking-page { width: min(100% - 30px, 680px); padding-top: 24px; }
+  .booking-doctor { padding: 22px; gap: 16px; }
+  .booking-avatar { width: 76px; height: 76px; flex-basis: 76px; border-radius: 17px; font-size: 23px; }
+  .booking-login-form { grid-template-columns: 1fr 1fr; }
+  .booking-login-form .button { grid-column: 1 / -1; }
+  .date-picker { grid-template-columns: repeat(7, minmax(59px, 1fr)); }
 }
 @media (max-width: 480px) {
   h1 {
@@ -322,18 +325,7 @@
     max-width: 180px;
   }
   .day-row {
-    flex-wrap: wrap;
-    position: relative;
-    padding-top: 20px;
-  }
-  .day-row > strong {
-    width: 100%;
-    padding: 0;
-  }
-  .day-row > .icon-button {
-    position: absolute;
-    top: 12px;
-    right: 0;
+    gap: 8px;
   }
   .day-windows {
     width: 100%;

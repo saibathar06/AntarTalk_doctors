@@ -56,7 +56,7 @@ export async function readUpload(userId, filename) {
 }
 
 export async function readAdminLicenseDocument(doctorId) {
-  const doctor = await prisma.doctorProfile.findFirst({ where: { id: doctorId, verificationStatus: 'PENDING', verificationSubmittedAt: { not: null } }, select: { userId: true, licenseDocumentUrl: true } });
+  const doctor = await prisma.doctorProfile.findUnique({ where: { id: doctorId }, select: { userId: true, licenseDocumentUrl: true } });
   const filename = doctor?.licenseDocumentUrl ? path.basename(doctor.licenseDocumentUrl) : '';
   if (!doctor || !/^[a-f0-9-]{36}\.(jpg|pdf)$/.test(filename)) throw new AppError(404, 'FILE_NOT_FOUND', 'Credential document not found.');
   return path.join(uploadRoot, doctor.userId, filename);
