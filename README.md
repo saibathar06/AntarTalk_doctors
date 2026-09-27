@@ -43,8 +43,8 @@ Port `2525` with `SMTP_SECURE=false` is also supported by Brevo. `EMAIL_FROM` mu
 Set these **backend-only** values in Render/local API configuration before using the new authentication and payment screens. Do not add them to `web/.env.local` or commit them.
 
 ```env
-RECAPTCHA_SITE_KEY=your-google-checkbox-site-key
-RECAPTCHA_SECRET_KEY=your-google-checkbox-secret
+RECAPTCHA_SITE_KEY=your-google-v2-checkbox-site-key
+RECAPTCHA_SECRET_KEY=your-google-v2-checkbox-secret
 RAZORPAY_KEY_ID=your-razorpay-test-key-id
 RAZORPAY_KEY_SECRET=your-razorpay-test-key-secret
 RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
@@ -52,7 +52,7 @@ RAZORPAY_CURRENCY=INR
 PLATFORM_COMMISSION_PERCENT=20
 ```
 
-The public site key is returned only by `GET /api/doctor/auth/recaptcha-config`; the secret is verified server-side with Google. Registration, password login, and forgotten-password requests require the checkbox. OTP resend relies on its existing signed challenge, cooldown and rate limits.
+The public site key is returned only by `GET /api/doctor/auth/recaptcha-config`; the secret is verified server-side with Google. The current Doctors web UI uses **Google reCAPTCHA v2 Checkbox** keys, not v3 score/action keys. Registration, password login, and forgotten-password requests require the checkbox. OTP resend relies on its existing signed challenge, cooldown and rate limits.
 
 Razorpay orders are created by the API from the doctor’s stored `consultationFee`; clients never submit an amount or commission. The server verifies the returned checkout signature and captured payment before it confirms the existing Redis-held booking. Configure a Razorpay webhook at `POST /api/payments/razorpay/webhook` with the same webhook secret. The webhook is signed and records capture status, but it never creates a booking by itself.
 
