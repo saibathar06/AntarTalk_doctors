@@ -27,14 +27,18 @@ doctorAuthRouter.use((req, res, next) => {
   const origin = req.get('origin');
   if (origin && !env.CORS_ORIGINS.includes(origin)) return next(new AppError(403, 'ORIGIN_REQUIRED', 'Use the configured doctor website origin.'));
   next();
-}, authLimiter, accountAuthLimiter);
+});
 doctorAuthRouter.get('/recaptcha-config', (_req, res) => res.json({ success: true, data: recaptchaConfiguration() }));
+doctorAuthRouter.get('/me', authenticateUser, requireWebsiteUser, asyncHandler(async (req, res) => res.json({ success: true, data: { id: req.user.id, role: req.user.role } })));
+doctorAuthRouter.use((req, _res, next) => {
+  if (req.path === '/refresh' && !readCookie(req)) return next(new AppError(401, 'INVALID_REFRESH_TOKEN', 'Sign in to continue.'));
+  next();
+}, authLimiter, accountAuthLimiter);
 doctorAuthRouter.post('/register', otpLimiter, validate(websiteRegisterWithRecaptchaSchema), asyncHandler(async (req, res) => {
   await verifyRecaptcha(req.body.recaptchaToken, 'doctor_register');
   res.status(201).json({ success: true, data: await registerWebsiteDoctor(req.body, { ip: req.ip }) });
 }));
 
-doctorAuthRouter.get('/me', authenticateUser, requireWebsiteUser, asyncHandler(async (req, res) => res.json({ success: true, data: { id: req.user.id, role: req.user.role } })));
 doctorAuthRouter.post('/login', otpLimiter, validate(websiteLoginWithRecaptchaSchema), asyncHandler(async (req, res) => {
   await verifyRecaptcha(req.body.recaptchaToken, 'doctor_login');
   res.json({ success: true, data: await beginDoctorLogin(req.body) });
