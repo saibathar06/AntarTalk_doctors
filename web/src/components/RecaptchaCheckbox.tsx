@@ -27,11 +27,30 @@ function scoreApi(): ScoreApi | null {
 function apiFor(mode: RecaptchaMode) {
   return mode === "v3" ? scoreApi() : checkboxApi();
 }
+function waitForApi(mode: RecaptchaMode): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const check = () => {
+      if (apiFor(mode)) resolve();
+      else if (Date.now() - started >= 10_000) reject(new Error(mode === "v3"
+        ? "Google reCAPTCHA did not load the score-based API. Check the configured v3 key."
+        : "Google reCAPTCHA loaded, but the checkbox did not initialize. Check the v2 Checkbox key and browser console."));
+      else window.setTimeout(check, 100);
+    };
+    check();
+  });
+}
 function loadScript(mode: RecaptchaMode, siteKey: string) {
   if (apiFor(mode)) return Promise.resolve();
   if (scriptPromise && loadedMode === mode) return scriptPromise;
   if (scriptPromise) return Promise.reject(new Error("Security verification is still loading. Please try again in a moment."));
   loadedMode = mode;
+  // A prior mount may have loaded api.js while its dependencies are still initializing.
+  const existing = document.querySelector<HTMLScriptElement>('script[src^="https://www.google.com/recaptcha/api.js"]');
+  if (existing) {
+    scriptPromise = waitForApi(mode).catch((error) => { scriptPromise = null; loadedMode = null; throw error; });
+    return scriptPromise;
+  }
   scriptPromise = new Promise<void>((resolve, reject) => {
     const script = document.createElement("script");
     script.src = mode === "v3"
@@ -39,12 +58,7 @@ function loadScript(mode: RecaptchaMode, siteKey: string) {
       : "https://www.google.com/recaptcha/api.js?render=explicit";
     script.async = true;
     script.defer = true;
-    script.onload = () => {
-      if (apiFor(mode)) resolve();
-      else reject(new Error(mode === "v3"
-        ? "Google reCAPTCHA did not load the score-based API. Check the configured v3 key."
-        : "Google reCAPTCHA did not load the Checkbox API. Check the configured v2 Checkbox key."));
-    };
+    script.onload = () => { void waitForApi(mode).then(resolve, reject); };
     script.onerror = () => reject(new Error("Security verification could not load."));
     document.head.append(script);
   }).catch((error) => {

@@ -38,7 +38,8 @@ app.use(pinoHttp({ logger, genReqId: (req) => req.id, serializers: {
 app.use(helmet({ contentSecurityPolicy: { directives: {
   imgSrc: ["'self'", 'data:', 'blob:'],
   scriptSrc: ["'self'", 'https://www.google.com', 'https://www.gstatic.com', 'https://checkout.razorpay.com'],
-  frameSrc: ["'self'", 'https://www.google.com', 'https://www.gstatic.com', 'https://api.razorpay.com', 'https://checkout.razorpay.com']
+  frameSrc: ["'self'", 'https://www.google.com', 'https://recaptcha.google.com', 'https://www.gstatic.com', 'https://api.razorpay.com', 'https://checkout.razorpay.com'],
+  connectSrc: ["'self'", 'https://www.google.com/recaptcha/']
 } } }));
 app.use(cors({
   origin(origin, callback) {

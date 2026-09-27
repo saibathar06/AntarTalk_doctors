@@ -281,7 +281,8 @@ test("sign-in requests an email code and keeps tokens out of browser storage", a
 }) => {
   await page.route("https://www.google.com/recaptcha/api.js?render=explicit", (route) => route.fulfill({
     contentType: "application/javascript",
-    body: "window.grecaptcha={render:(element,options)=>{setTimeout(()=>options.callback('test-recaptcha-token'),0);return 1},reset:()=>{}};",
+    // api.js may finish loading before its checkbox methods become available.
+    body: "window.grecaptcha={};setTimeout(()=>{window.grecaptcha.render=(element,options)=>{setTimeout(()=>options.callback('test-recaptcha-token'),0);return 1};window.grecaptcha.reset=()=>{}},150);",
   }));
   await page.route("**/api/**", (route) => {
     const path = new URL(route.request().url()).pathname;

@@ -54,7 +54,7 @@ RAZORPAY_CURRENCY=INR
 PLATFORM_COMMISSION_PERCENT=20
 ```
 
-The public site key is returned only by `GET /api/doctor/auth/recaptcha-config`; the secret is verified server-side with Google. Set `RECAPTCHA_MODE=v2_checkbox` for **Google reCAPTCHA v2 Checkbox** keys, or `RECAPTCHA_MODE=v3` for score-based v3 keys. v3 tokens are generated for the server-validated registration, login, or password-reset action and refreshed while its form stays open. OTP resend relies on its existing signed challenge, cooldown and rate limits.
+The Doctors website is configured for **Google reCAPTCHA v2 Checkbox** (`RECAPTCHA_MODE=v2_checkbox`). The public site key comes from `GET /api/doctor/auth/recaptcha-config`; Vite does not read a `VITE_RECAPTCHA_SITE_KEY` for this app. The backend keeps the matching secret and verifies each submitted token with Google. For local testing, allow `localhost` on the development key and open `http://localhost:5173`; the current key rejects `127.0.0.1`. Allow `antartalk-doctors.onrender.com` on the production key when serving the website there. OTP resend relies on its signed challenge, cooldown and rate limits.
 
 Razorpay orders are created by the API from the doctor’s stored `consultationFee`; clients never submit an amount or commission. The server verifies the returned checkout signature and captured payment before it confirms the existing Redis-held booking. Configure a Razorpay webhook at `POST /api/payments/razorpay/webhook` with the same webhook secret. The webhook is signed and records capture status, but it never creates a booking by itself.
 

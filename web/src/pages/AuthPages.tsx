@@ -393,7 +393,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
             </>
           )}
           {(mode === "login" || mode === "register" || mode === "forgot") && <RecaptchaCheckbox onToken={setRecaptchaToken} action={mode === "register" ? "doctor_register" : mode === "forgot" ? "doctor_forgot_password" : "doctor_login"} />}
-          <button className="button full" disabled={busy}>
+          <button className="button full" disabled={busy || ((mode === "login" || mode === "register" || mode === "forgot") && !recaptchaToken)}>
             {busy
               ? "Please wait…"
               : mode === "register"
