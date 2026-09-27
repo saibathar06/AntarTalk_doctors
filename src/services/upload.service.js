@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { mkdir, writeFile, unlink } from 'node:fs/promises';
+import { mkdir, writeFile, unlink, access } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
 import sharp from 'sharp';
 import { prisma } from '../lib/prisma.js';
 import { env } from '../config/env.js';
@@ -71,12 +72,24 @@ export async function readUpload(userId, filename) {
   const doctor = await prisma.doctorProfile.findUnique({ where: { userId }, select: { profileImageUrl: true, licenseDocumentUrl: true } });
   const url = `/api/doctor/files/${filename}`;
   if (!doctor || ![doctor.profileImageUrl, doctor.licenseDocumentUrl].includes(url)) throw new AppError(404, 'FILE_NOT_FOUND', 'File not found.');
-  return path.join(uploadRoot, userId, filename);
+  const file = path.join(uploadRoot, userId, filename);
+  try {
+    await access(file, fsConstants.R_OK);
+  } catch {
+    throw new AppError(410, 'FILE_UNAVAILABLE', 'This file is no longer available in secure storage. Upload it again.');
+  }
+  return file;
 }
 
 export async function readAdminLicenseDocument(doctorId) {
   const doctor = await prisma.doctorProfile.findUnique({ where: { id: doctorId }, select: { userId: true, licenseDocumentUrl: true } });
   const filename = doctor?.licenseDocumentUrl ? path.basename(doctor.licenseDocumentUrl) : '';
   if (!doctor || !/^[a-f0-9-]{36}\.(jpg|pdf)$/.test(filename)) throw new AppError(404, 'FILE_NOT_FOUND', 'Credential document not found.');
-  return path.join(uploadRoot, doctor.userId, filename);
+  const file = path.join(uploadRoot, doctor.userId, filename);
+  try {
+    await access(file, fsConstants.R_OK);
+  } catch {
+    throw new AppError(410, 'CREDENTIAL_DOCUMENT_UNAVAILABLE', 'The credential document is no longer available in secure storage. Ask this doctor to upload it again before approving their application.');
+  }
+  return file;
 }

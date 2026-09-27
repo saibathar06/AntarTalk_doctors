@@ -77,7 +77,7 @@ Deploy the additive gender/IST migration with `npm run db:migrate`, then run `np
 
 Website: `npm --prefix web run lint`, `npm run web:build`, `npm run web:test`. Install the browser first with `npm --prefix web exec -- playwright install chromium`. Browser tests use isolated API fixtures; four backend infrastructure tests require disposable PostgreSQL/Redis URLs.
 
-Production: `npm run web:build`, then `npm start`. Express serves `/doctor/*` and the API under one HTTPS origin. Configure persistent private `UPLOAD_DIR` storage, production secrets and explicit trusted proxy settings.
+Production: `npm run web:build`, then `npm start`. Express serves `/doctor/*` and the API under one HTTPS origin. Configure persistent private `UPLOAD_DIR` storage, production secrets and explicit trusted proxy settings. On Render, the default service filesystem is erased on redeploy/restart: attach a persistent disk and set `UPLOAD_DIR` to a directory under its mount (for example `/var/data/antartalk-uploads`), or use private object storage before relying on uploaded profile or credential files.
 
 Provision the first ADMIN account through your controlled database/admin process; there is intentionally no public endpoint that can grant the ADMIN role.
 

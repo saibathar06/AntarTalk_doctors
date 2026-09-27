@@ -7,7 +7,7 @@ import { profileCompletion, canDoctorTakeSessions } from '../src/services/eligib
 import { appointments, clients, joinState } from '../src/services/doctorWorkspace.service.js';
 import { changedCredentialFields } from '../src/services/doctor.service.js';
 import { updateProfileSchema } from '../src/validation/doctor.schemas.js';
-import { readUpload, saveUpload, normalizeImageUpload } from '../src/services/upload.service.js';
+import { readUpload, readAdminLicenseDocument, saveUpload, normalizeImageUpload } from '../src/services/upload.service.js';
 import sharp from 'sharp';
 
 const doctor = {
@@ -70,6 +70,13 @@ describe('private upload boundaries', () => {
   it('cannot fetch an unowned file', async () => {
     await expect(readUpload('user', 'another-file.pdf')).rejects.toMatchObject({ code: 'FILE_NOT_FOUND' });
     expect(prisma.doctorProfile.findUnique.mock.calls[0][0].where).toEqual({ userId: 'user' });
+  });
+  it('reports a stale credential reference instead of attempting to download a missing file', async () => {
+    prisma.doctorProfile.findUnique.mockResolvedValue({ userId: '11111111-1111-4111-8111-111111111111', licenseDocumentUrl: '/api/doctor/files/22222222-2222-4222-8222-222222222222.pdf' });
+    await expect(readAdminLicenseDocument('doctor')).rejects.toMatchObject({
+      status: 410,
+      code: 'CREDENTIAL_DOCUMENT_UNAVAILABLE'
+    });
   });
   it('rejects missing files and arbitrary HTML', async () => {
     await expect(saveUpload('user', 'doctor', undefined)).rejects.toMatchObject({ code: 'FILE_REQUIRED' });
