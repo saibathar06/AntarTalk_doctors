@@ -12,13 +12,14 @@ export function profileCompletion(profile) {
     bio: Boolean(profile.bio?.trim()),
     languages: Boolean(profile.languages?.length),
     preferredSessionLanguage: Boolean(profile.preferredSessionLanguage?.trim()),
-    expertise: Boolean(profile.expertise?.length)
+    expertise: Boolean(profile.expertise?.length),
+    consultationFee: Number(profile.consultationFee) > 0
   };
   const missingFields = Object.keys(fields).filter((key) => !fields[key]);
-  return { profileCompleted: missingFields.length === 0, completionPercentage: Math.round((10 - missingFields.length) / 10 * 100), missingFields };
+  return { profileCompleted: missingFields.length === 0, completionPercentage: Math.round((Object.keys(fields).length - missingFields.length) / Object.keys(fields).length * 100), missingFields };
 }
 
 export function canDoctorTakeSessions(profile, user = profile?.user) {
   return Boolean(profile && user?.role === 'DOCTOR' && user.accountStatus === 'ACTIVE' && user.emailVerifiedAt &&
-    profileCompletion(profile).profileCompleted && profile.verificationStatus === 'VERIFIED' && profile.isAcceptingBookings);
+    profileCompletion(profile).profileCompleted && profile.verificationStatus === 'VERIFIED' && profile.timezone === 'Asia/Kolkata' && profile.isAcceptingBookings);
 }

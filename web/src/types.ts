@@ -5,6 +5,7 @@ export interface Profile {
   email: string;
   phoneNumber: string;
   dateOfBirth: string;
+  gender: "FEMALE" | "MALE" | "NON_BINARY" | "OTHER" | "PREFER_NOT_TO_SAY" | null;
   professionalCategory: string;
   professionalStatus: string;
   verificationStatus: string;
@@ -42,6 +43,7 @@ export interface VerificationRequest {
   lastName: string;
   email: string;
   phoneNumber: string;
+  gender: Profile["gender"];
   professionalCategory: string;
   professionalStatus: string;
   licenseNumber: string | null;
@@ -55,6 +57,7 @@ export interface VerificationRequest {
   institution: string | null;
   graduationYear: number | null;
   experienceYears: number | null;
+  consultationFee: string | null;
   bio: string | null;
   languages: string[];
   preferredSessionLanguage: string | null;
@@ -65,7 +68,7 @@ export interface VerificationRequest {
   verificationStatus: "PENDING" | "VERIFIED" | "REJECTED" | "SUSPENDED";
   verificationSubmittedAt: string | null;
   verificationReason: string | null;
-  isAcceptingBookings: false;
+  isAcceptingBookings: boolean;
   updatedAt: string;
   timezone: string;
 }
@@ -130,10 +133,37 @@ export interface Earning {
   currency: string;
   status: string;
 }
+export interface PayoutAccount {
+  id: string;
+  type: "UPI" | "BANK_ACCOUNT";
+  displayLabel: string;
+  isDefault: boolean;
+  createdAt: string;
+}
+export interface Payout {
+  id: string;
+  doctorId: string;
+  payoutAccountId: string;
+  amount: string;
+  currency: string;
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELLED";
+  failureReason: string | null;
+  providerReference: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  payoutAccount: PayoutAccount;
+}
+export interface AdminPayout extends Payout {
+  doctor: { id: string; firstName: string; lastName: string; email: string };
+}
+export interface AdminPayoutDetail extends AdminPayout {
+  payoutAccount: PayoutAccount & { details: { type: string; upiId?: string; accountHolderName?: string; accountNumber?: string; ifsc?: string } };
+}
 export interface BookableDoctor {
   id: string;
   firstName: string;
   lastName: string;
+  gender: Profile["gender"];
   professionalCategory: string;
   specialization: string | null;
   qualification: string | null;

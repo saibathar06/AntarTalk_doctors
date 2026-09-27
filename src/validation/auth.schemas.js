@@ -5,6 +5,7 @@ const registration = z.object({
   firstName: z.string().trim().min(1).max(100),
   lastName: z.string().trim().min(1).max(100),
   dateOfBirth,
+  gender: z.enum(['FEMALE', 'MALE', 'NON_BINARY', 'OTHER', 'PREFER_NOT_TO_SAY']),
   phoneNumber: phone,
   email,
   password,
@@ -17,7 +18,7 @@ const registration = z.object({
   specialization: z.string().trim().max(200).optional(),
   expectedGraduationDate: isoDate.optional(),
   enrollmentNumber: z.string().trim().min(2).max(100).optional(),
-  timezone: z.string().min(1).max(64).default('UTC')
+  timezone: z.literal('Asia/Kolkata').default('Asia/Kolkata')
 }).superRefine((data, ctx) => {
   const ageCutoff = new Date();
   ageCutoff.setUTCFullYear(ageCutoff.getUTCFullYear() - 18);

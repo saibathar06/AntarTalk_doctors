@@ -153,7 +153,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
                 return {
                   ...registration,
                   phoneNumber: `${countryCode}${String(values.localPhoneNumber).replace(/\D/g, "")}`,
-                  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                  timezone: "Asia/Kolkata",
                   recaptchaToken,
                 };
               })()
@@ -337,6 +337,19 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
                   Date of birth
                   <input type="date" name="dateOfBirth" required />
                 </label>
+                <label>
+                  Gender
+                  <select name="gender" defaultValue="" required>
+                    <option value="" disabled>Select gender</option>
+                    <option value="FEMALE">Female</option>
+                    <option value="MALE">Male</option>
+                    <option value="NON_BINARY">Non-binary</option>
+                    <option value="OTHER">Other</option>
+                    <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+                  </select>
+                </label>
+              </div>
+              <div className="form-grid">
                 <label>
                   Professional category
                   <select name="professionalCategory">

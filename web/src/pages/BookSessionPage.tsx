@@ -355,6 +355,7 @@ export function BookSessionPage() {
           <span className="verified-label"><SealCheckIcon weight="fill" /> Verified professional</span>
           <h1>Dr. {doctor.firstName} {doctor.lastName}</h1>
           <p className="booking-speciality">{doctor.professionalCategory.replaceAll("_", " ")}{doctor.specialization ? ` · ${doctor.specialization}` : ""}</p>
+          {doctor.gender && doctor.gender !== "PREFER_NOT_TO_SAY" && <p className="booking-speciality">{doctor.gender.replaceAll("_", " ").toLowerCase().replace(/^./, (letter) => letter.toUpperCase())}</p>}
           <p>{doctor.bio || "This professional has not added a public biography yet."}</p>
           <div className="booking-doctor-meta">
             {doctor.qualification && <span>{doctor.qualification}{doctor.institution ? ` · ${doctor.institution}` : ""}</span>}

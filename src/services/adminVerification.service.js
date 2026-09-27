@@ -1,14 +1,15 @@
 import { prisma } from '../lib/prisma.js';
 import { AppError } from '../errors/AppError.js';
 import { recordAudit } from './audit.service.js';
+import { profileCompletion } from './eligibility.service.js';
 import { lockDoctor, lockUser, serialTransaction } from './transaction.service.js';
 
 const reviewSelect = {
-  id: true, firstName: true, lastName: true, phoneNumber: true,
+  id: true, firstName: true, lastName: true, gender: true, phoneNumber: true,
   professionalCategory: true, professionalStatus: true, licenseNumber: true,
   licenseAuthority: true, university: true, course: true, specialization: true,
   expectedGraduationDate: true, enrollmentNumber: true, qualification: true,
-  institution: true, graduationYear: true, experienceYears: true, bio: true,
+  institution: true, graduationYear: true, experienceYears: true, consultationFee: true, bio: true,
   languages: true, preferredSessionLanguage: true, expertise: true, licenseDocumentUrl: true, profileImageUrl: true,
   timezone: true, verificationStatus: true, verificationSubmittedAt: true,
   verificationReason: true, isAcceptingBookings: true, updatedAt: true,
@@ -59,9 +60,11 @@ export async function decideVerification(adminId, id, input, context = {}) {
     const profile = await tx.doctorProfile.findFirst({ where: { id, ...submittedWhere }, select: reviewSelect });
     if (!profile) throw new AppError(409, 'VERIFICATION_REQUEST_CHANGED', 'This verification request is no longer awaiting review. Reload the queue.');
     if (profile.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) throw new AppError(409, 'VERIFICATION_REQUEST_CHANGED', 'The doctor updated this profile. Reload before deciding.');
+    if (input.status === 'VERIFIED' && !profileCompletion(profile).profileCompleted) throw new AppError(409, 'PROFILE_INCOMPLETE', 'The profile is no longer complete. Ask the doctor to resubmit.');
+    if (input.status === 'VERIFIED' && profile.timezone !== 'Asia/Kolkata') throw new AppError(409, 'INDIA_TIMEZONE_REQUIRED', 'The doctor must set their practice timezone to India Standard Time before approval.');
     const decision = await tx.doctorProfile.update({
       where: { id },
-      data: { verificationStatus: input.status, verificationReason: input.status === 'REJECTED' ? input.reason : null, isAcceptingBookings: false },
+      data: { verificationStatus: input.status, verificationReason: input.status === 'REJECTED' ? input.reason : null, isAcceptingBookings: input.status === 'VERIFIED' },
       select: reviewSelect
     });
     await recordAudit({ actorId: adminId, action: input.status === 'VERIFIED' ? 'DOCTOR_VERIFICATION_APPROVED' : 'DOCTOR_VERIFICATION_REJECTED', entityType: 'DoctorProfile', entityId: id, metadata: input.status === 'REJECTED' ? { reason: input.reason } : undefined, ipAddress: context.ip }, tx);

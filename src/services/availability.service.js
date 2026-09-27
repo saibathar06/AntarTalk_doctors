@@ -36,6 +36,8 @@ export async function replaceWorkingHours(userId, doctorId, { timezone, windows 
   return serialTransaction(async (tx) => {
     await lockUser(tx, userId);
     await lockDoctor(tx, doctorId);
+    const doctor = await tx.doctorProfile.findUnique({ where: { id: doctorId }, select: { verificationStatus: true } });
+    if (doctor?.verificationStatus !== 'VERIFIED') throw new AppError(403, 'DOCTOR_NOT_VERIFIED', 'Professional verification is required to manage availability.');
     await tx.doctorWorkingHour.deleteMany({ where: { doctorId } });
     if (windows.length) {
       await tx.doctorWorkingHour.createMany({ data: windows.map((window) => ({
@@ -58,6 +60,8 @@ export async function createBlockedSlot(userId, doctorId, input, context = {}) {
   return serialTransaction(async (tx) => {
   await lockUser(tx, userId);
   await lockDoctor(tx, doctorId);
+  const doctor = await tx.doctorProfile.findUnique({ where: { id: doctorId }, select: { verificationStatus: true } });
+  if (doctor?.verificationStatus !== 'VERIFIED') throw new AppError(403, 'DOCTOR_NOT_VERIFIED', 'Professional verification is required to block time.');
   const conflict = await tx.booking.findFirst({ where: {
     doctorId, status: { in: ['PENDING', 'CONFIRMED'] }, startTime: { lt: input.endTime }, endTime: { gt: input.startTime }
   } });
@@ -74,6 +78,10 @@ export async function deleteBlockedSlot(userId, doctorId, blockedId, context = {
   const existing = await prisma.doctorBlockedSlot.findFirst({ where: { id: blockedId, doctorId } });
   if (!existing) throw new AppError(404, 'BLOCKED_SLOT_NOT_FOUND', 'Blocked period not found.');
   await prisma.$transaction(async (tx) => {
+    await lockUser(tx, userId);
+    await lockDoctor(tx, doctorId);
+    const doctor = await tx.doctorProfile.findUnique({ where: { id: doctorId }, select: { verificationStatus: true } });
+    if (doctor?.verificationStatus !== 'VERIFIED') throw new AppError(403, 'DOCTOR_NOT_VERIFIED', 'Professional verification is required to manage blocked time.');
     await tx.doctorBlockedSlot.delete({ where: { id: blockedId } });
     await recordAudit({ actorId: userId, action: 'TIME_UNBLOCKED', entityType: 'DoctorBlockedSlot', entityId: blockedId, ipAddress: context.ip }, tx);
   });

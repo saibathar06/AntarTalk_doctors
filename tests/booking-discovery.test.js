@@ -7,6 +7,7 @@ const completeDoctor = {
   userId: 'doctor-user-id',
   firstName: 'Asha',
   lastName: 'Sharma',
+  gender: 'FEMALE',
   professionalCategory: 'PSYCHOLOGIST',
   professionalStatus: 'LICENSED_PROFESSIONAL',
   specialization: 'Anxiety care',
@@ -38,7 +39,7 @@ describe('public booking doctor discovery', () => {
   it('returns only a bookable doctor’s client-safe professional information', async () => {
     const db = { doctorProfile: { findUnique: vi.fn(async () => completeDoctor) } };
     await expect(getBookableDoctor(completeDoctor.id, db)).resolves.toEqual({
-      id: 'doctor-id', firstName: 'Asha', lastName: 'Sharma',
+      id: 'doctor-id', firstName: 'Asha', lastName: 'Sharma', gender: 'FEMALE',
       professionalCategory: 'PSYCHOLOGIST', specialization: 'Anxiety care',
       qualification: 'MSc Psychology', institution: 'Test University', experienceYears: 7,
       preferredSessionLanguage: 'English', languages: ['English', 'Hindi'],
@@ -50,5 +51,9 @@ describe('public booking doctor discovery', () => {
   it('does not disclose a professional who is not currently bookable', async () => {
     const db = { doctorProfile: { findUnique: vi.fn(async () => ({ ...completeDoctor, isAcceptingBookings: false })) } };
     await expect(getBookableDoctor(completeDoctor.id, db)).rejects.toMatchObject({ code: 'DOCTOR_NOT_BOOKABLE' });
+  });
+  it('respects a professional’s choice not to publish gender', async () => {
+    const db = { doctorProfile: { findUnique: vi.fn(async () => ({ ...completeDoctor, gender: 'PREFER_NOT_TO_SAY' })) } };
+    await expect(getBookableDoctor(completeDoctor.id, db)).resolves.toMatchObject({ gender: null });
   });
 });

@@ -24,6 +24,7 @@ export function ProfilePage() {
     const values = Object.fromEntries(new FormData(event.currentTarget));
     const input = {
       ...values,
+      timezone: "Asia/Kolkata",
       languages: String(values.languages)
         .split(",")
         .map((s) => s.trim())
@@ -98,7 +99,7 @@ export function ProfilePage() {
     try {
       await mutate("/api/doctor/verification/submit", "POST", {});
       await reload();
-      setNotice("Your complete profile was submitted for professional review. Bookings remain paused until you are verified and opt in.");
+      setNotice("Your complete profile was submitted for review. Once verified, your practice will start accepting bookings automatically.");
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); setBusyLabel(""); }
   }
@@ -109,6 +110,7 @@ export function ProfilePage() {
         description="Clients will see your professional information. Keep it thoughtful and up to date."
       />
       <ProfileCompletionCard profile={p!} />
+      {p!.timezone !== "Asia/Kolkata" && <p className="alert">New sessions use India Standard Time. Saving this profile changes your practice to IST and pauses previous weekly hours; you can set fresh hours after verification.</p>}
       {p!.verificationStatus === "REJECTED" && <section className="card verification-note"><h2>Review changes needed</h2><p>{p!.verificationReason || "Update your professional information, then submit it for review again."}</p></section>}
       {p!.verificationStatus === "PENDING" && p!.verificationSubmittedAt && <section className="card verification-note"><h2>Profile under review</h2><p>Your verification request was submitted. You can keep editing your profile, but credential changes require a new submission.</p></section>}
       <ErrorState message={error} />
@@ -158,6 +160,17 @@ export function ProfilePage() {
                 maxLength={100}
                 required
               />
+            </label>
+            <label>
+              Gender
+              <select name="gender" defaultValue={p!.gender ?? ""} required>
+                <option value="" disabled>Select gender</option>
+                <option value="FEMALE">Female</option>
+                <option value="MALE">Male</option>
+                <option value="NON_BINARY">Non-binary</option>
+                <option value="OTHER">Other</option>
+                <option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
+              </select>
             </label>
             <label>
               Category
@@ -266,7 +279,7 @@ export function ProfilePage() {
               </select>
             </label>
             <label>
-              Consultation fee (optional)
+              Consultation fee (INR)
               <input
                 name="consultationFee"
                 type="number"
@@ -278,8 +291,7 @@ export function ProfilePage() {
             </label>
           </div>
           <p className="help">
-            The fee is a profile preference, not a payment order. Session
-            duration is controlled by the shared booking system.
+            Your consultation fee is required for review and is used as the INR session price. Session duration is controlled by the shared booking system.
           </p>
         </fieldset>
       </form>
@@ -323,7 +335,7 @@ export function ProfilePage() {
             <button className="button" type="button" disabled={busy || !p!.profileCompleted} onClick={submitForReview}>Submit for review</button>
           )}
         </div>
-        {!p!.profileCompleted && <p className="help">Finish the required fields, including a profile photo and preferred session language, then save your profile to unlock submission.</p>}
+        {!p!.profileCompleted && <p className="help">Finish the required fields, including a profile photo, session language and consultation fee, then save your profile to unlock submission.</p>}
       </section>
       {busy && <TransitionLoader label={busyLabel || "Updating your profile…"} />}
     </>

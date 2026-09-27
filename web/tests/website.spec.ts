@@ -11,6 +11,7 @@ const profile = {
   professionalCategory: "PSYCHOLOGIST",
   professionalStatus: "LICENSED_PROFESSIONAL",
   verificationStatus: "PENDING",
+  gender: "FEMALE",
   licenseNumber: "TEST-ONLY",
   timezone: "Asia/Kolkata",
   bio: null,
@@ -21,7 +22,7 @@ const profile = {
   languages: [],
   preferredSessionLanguage: null,
   expertise: [],
-  consultationFee: null,
+  consultationFee: "1200.00",
   profileImageUrl: null,
   licenseDocumentUrl: null,
   profileCompleted: false,
@@ -35,7 +36,7 @@ const empty = {
   items: [],
   pagination: { page: 1, limit: 20, total: 0, pages: 0 },
 };
-async function mockWorkspace(page: Page) {
+async function mockWorkspace(page: Page, doctorProfile = profile) {
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     const data = path.endsWith("/refresh")
@@ -43,7 +44,7 @@ async function mockWorkspace(page: Page) {
       : path.endsWith("/auth/me")
         ? { id: "test-doctor", role: "DOCTOR" }
         : path.endsWith("/profile")
-          ? profile
+          ? doctorProfile
           : path.endsWith("/dashboard")
             ? {
                 todaySessions: 0,
@@ -237,14 +238,7 @@ test("real empty states, profile completion, navigation and responsive layout", 
     path: `test-results/dashboard-${test.info().project.name}.png`,
     fullPage: true,
   });
-  for (const route of [
-    "appointments",
-    "clients",
-    "availability",
-    "profile",
-    "settings",
-    "earnings",
-  ]) {
+  for (const route of ["profile", "settings"]) {
     await page.goto(`/doctor/${route}`);
     await expect(page.locator("main h1")).toBeVisible();
     expect(
@@ -254,11 +248,15 @@ test("real empty states, profile completion, navigation and responsive layout", 
       route,
     ).toBe(true);
   }
+  for (const route of ["appointments", "clients", "availability", "earnings"]) {
+    await page.goto(`/doctor/${route}`);
+    await expect(page).toHaveURL(/\/doctor\/dashboard$/);
+  }
 });
 test("availability saves multiple and overnight periods through API", async ({
   page,
 }) => {
-  await mockWorkspace(page);
+  await mockWorkspace(page, { ...profile, verificationStatus: "VERIFIED", isAcceptingBookings: true, profileCompleted: true });
   await page.goto("/doctor/availability");
   await page.getByRole("button", { name: "Add Monday window" }).click();
   await page.getByLabel("Monday start").fill("23:00");
@@ -281,8 +279,13 @@ test("availability saves multiple and overnight periods through API", async ({
 test("sign-in requests an email code and keeps tokens out of browser storage", async ({
   page,
 }) => {
+  await page.route("https://www.google.com/recaptcha/api.js?render=explicit", (route) => route.fulfill({
+    contentType: "application/javascript",
+    body: "window.grecaptcha={render:(element,options)=>{setTimeout(()=>options.callback('test-recaptcha-token'),0);return 1},reset:()=>{}};",
+  }));
   await page.route("**/api/**", (route) => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/recaptcha-config")) return route.fulfill({ json: { success: true, data: { enabled: true, siteKey: "test-site-key" } } });
     return route.fulfill({
       status: path.endsWith("/refresh") ? 401 : 200,
       json: path.endsWith("/refresh")
@@ -314,6 +317,7 @@ test("sign-in requests an email code and keeps tokens out of browser storage", a
   expect((await request).postDataJSON()).toEqual({
     email: "test@example.test",
     password: "TestPassword123!",
+    recaptchaToken: "test-recaptcha-token",
   });
   await expect(page.getByLabel("Verification code")).toBeVisible();
   expect(
@@ -425,6 +429,44 @@ test("admin sees only the verification queue and can reject with a reason", asyn
     expectedUpdatedAt: review.updatedAt,
   });
 });
+test("admin reviews a payout before recording its transfer", async ({ page }) => {
+  const payoutId = "22222222-2222-4222-8222-222222222222";
+  let status = "PENDING";
+  let reviewBody: unknown;
+  let completionBody: unknown;
+  const item = () => ({
+    id: payoutId, doctorId: "doctor", payoutAccountId: "account", amount: "750.00", currency: "INR", status,
+    createdAt: "2030-01-01T10:00:00Z", completedAt: null, providerReference: null, failureReason: null,
+    doctor: { id: "doctor", firstName: "Asha", lastName: "Sharma", email: "asha@example.test" },
+    payoutAccount: { id: "account", type: "UPI", displayLabel: "Primary UPI", details: { type: "UPI", upiId: "asha@bank" } },
+  });
+  await page.route("**/api/**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/refresh")) return route.fulfill({ json: { success: true, data: { accessToken: "admin-token" } } });
+    if (url.pathname.endsWith("/auth/me")) return route.fulfill({ json: { success: true, data: { id: "admin", role: "ADMIN" } } });
+    if (url.pathname.endsWith("/verification-requests")) return route.fulfill({ json: { success: true, data: { items: [], pagination: { page: 1, limit: 25, total: 0, pages: 0 } } } });
+    if (url.pathname.endsWith("/payouts") && route.request().method() === "GET") {
+      const matches = url.searchParams.get("status") === status;
+      return route.fulfill({ json: { success: true, data: { items: matches ? [item()] : [], pagination: { page: 1, limit: 25, total: matches ? 1 : 0, pages: matches ? 1 : 0 } } } });
+    }
+    if (url.pathname.endsWith(`/payouts/${payoutId}`)) return route.fulfill({ json: { success: true, data: item() } });
+    if (url.pathname.endsWith("/review")) { reviewBody = route.request().postDataJSON(); status = "PROCESSING"; return route.fulfill({ json: { success: true, data: item() } }); }
+    if (url.pathname.endsWith("/complete")) { completionBody = route.request().postDataJSON(); status = "COMPLETED"; return route.fulfill({ json: { success: true, data: item() } }); }
+    return route.fulfill({ status: 500, json: { success: false, error: { message: "Unexpected test request" } } });
+  });
+  await page.goto("/doctor/admin");
+  await page.getByRole("tab", { name: "Payouts" }).click();
+  await page.getByRole("button", { name: /Asha Sharma/ }).click();
+  await expect(page.getByText("asha@bank")).toBeVisible();
+  await page.getByRole("button", { name: "Approve request" }).click();
+  expect(reviewBody).toEqual({ decision: "APPROVE" });
+  await page.getByLabel("Request status").selectOption("PROCESSING");
+  await page.getByRole("button", { name: /Asha Sharma/ }).click();
+  await page.getByLabel("Bank / UPI transfer reference").fill("UTR123456");
+  await page.getByRole("button", { name: "Record completed transfer" }).click();
+  expect(completionBody).toEqual({ providerReference: "UTR123456" });
+  await expect(page.getByText("Transfer recorded and payout marked completed.")).toBeVisible();
+});
 test("profile edits persist through the API and never submit completion flags", async ({
   page,
 }) => {
@@ -455,7 +497,7 @@ test("profile edits persist through the API and never submit completion flags", 
 test("join button follows backend permission and cannot fake a video room", async ({
   page,
 }) => {
-  await mockWorkspace(page);
+  await mockWorkspace(page, { ...profile, verificationStatus: "VERIFIED", isAcceptingBookings: true, profileCompleted: true });
   const item = {
     id: "test-booking",
     clientLabel: "Client TEST-ONLY",

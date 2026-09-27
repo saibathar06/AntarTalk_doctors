@@ -3,6 +3,7 @@ export const doctorProfileSelect = {
   firstName: true,
   lastName: true,
   dateOfBirth: true,
+  gender: true,
   phoneNumber: true,
   professionalCategory: true,
   professionalStatus: true,

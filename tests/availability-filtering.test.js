@@ -7,9 +7,9 @@ let getAvailableSlots, redis;
 
 const profile = {
   id: 'doctor-id', userId: 'doctor-user-id', firstName: 'Asha', lastName: 'Sharma',
-  timezone: 'UTC', profileImageUrl: '/api/doctor/files/00000000-0000-4000-8000-000000000001.jpg',
+  timezone: 'Asia/Kolkata', profileImageUrl: '/api/doctor/files/00000000-0000-4000-8000-000000000001.jpg',
   professionalCategory: 'PSYCHOLOGIST', professionalStatus: 'LICENSED_PROFESSIONAL',
-  licenseNumber: 'LICENSE-1', qualification: 'MSc Psychology', experienceYears: 3,
+  licenseNumber: 'LICENSE-1', qualification: 'MSc Psychology', experienceYears: 3, consultationFee: 1200,
   bio: 'Public biography', languages: ['English'], preferredSessionLanguage: 'English', expertise: ['Anxiety'],
   verificationStatus: 'VERIFIED', isAcceptingBookings: true,
   user: { role: 'DOCTOR', accountStatus: 'ACTIVE', emailVerifiedAt: new Date('2029-01-01T00:00:00Z') },
@@ -33,16 +33,16 @@ describe('availability filters on the shared backend', () => {
     const to = new Date('2030-01-08T00:00:00Z');
     const db = {
       doctorProfile: { findUnique: vi.fn(async () => profile) },
-      doctorBlockedSlot: { findMany: vi.fn(async () => [{ startTime: new Date('2030-01-07T11:00:00Z'), endTime: new Date('2030-01-07T12:00:00Z') }]) },
-      booking: { findMany: vi.fn(async () => [{ startTime: new Date('2030-01-07T12:00:00Z'), endTime: new Date('2030-01-07T13:00:00Z') }]) }
+      doctorBlockedSlot: { findMany: vi.fn(async () => [{ startTime: new Date('2030-01-07T05:30:00Z'), endTime: new Date('2030-01-07T06:30:00Z') }]) },
+      booking: { findMany: vi.fn(async () => [{ startTime: new Date('2030-01-07T06:30:00Z'), endTime: new Date('2030-01-07T07:30:00Z') }]) }
     };
     // The remaining 13:00 window is held in Redis, so only 10:00 is client-visible.
     redis.mget.mockResolvedValue([null, '{"reservationId":"other-client"}']);
     const result = await getAvailableSlots({ doctorId: profile.id, from, to }, db);
     expect(result).toEqual([expect.objectContaining({
       doctorId: profile.id,
-      startTime: new Date('2030-01-07T10:00:00Z'),
-      endTime: new Date('2030-01-07T11:00:00Z'),
+      startTime: new Date('2030-01-07T04:30:00Z'),
+      endTime: new Date('2030-01-07T05:30:00Z'),
       sessionDurationMinutes: 40,
       bufferDurationMinutes: 20
     })]);

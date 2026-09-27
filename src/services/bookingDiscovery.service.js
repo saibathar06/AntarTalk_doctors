@@ -30,6 +30,7 @@ export async function getBookableDoctor(doctorId, db = prisma) {
     id: doctor.id,
     firstName: doctor.firstName,
     lastName: doctor.lastName,
+    gender: doctor.gender === 'PREFER_NOT_TO_SAY' ? null : doctor.gender,
     professionalCategory: doctor.professionalCategory,
     specialization: doctor.specialization,
     qualification: doctor.qualification,

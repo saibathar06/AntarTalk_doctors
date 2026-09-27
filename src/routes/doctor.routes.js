@@ -33,8 +33,8 @@ doctorRouter.get('/files/:filename', validate(z.object({ params: z.object({ file
   res.sendFile(file, { dotfiles: 'deny', headers: { 'Content-Disposition': req.params.filename.endsWith('.pdf') ? 'attachment' : 'inline' } }, (error) => { if (error && !res.headersSent) res.status(404).json({ success: false, error: { code: 'FILE_NOT_FOUND', message: 'File not found.' } }); });
 }));
 doctorRouter.get('/dashboard', asyncHandler(async (req, res) => res.json({ success: true, data: await workspace.dashboard(req.user.doctorProfile.id) })));
-doctorRouter.get('/appointments', validate(z.object({ query: z.object({ ...pagination, filter: z.enum(['upcoming', 'today', 'past', 'completed', 'cancelled']).default('upcoming'), date: z.string().date().optional() }) })), asyncHandler(async (req, res) => res.json({ success: true, data: await workspace.appointments(req.user.doctorProfile.id, req.query) })));
-doctorRouter.get('/clients', validate(payoutListSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await workspace.clients(req.user.doctorProfile.id, req.query) })));
+doctorRouter.get('/appointments', requireVerifiedDoctor, validate(z.object({ query: z.object({ ...pagination, filter: z.enum(['upcoming', 'today', 'past', 'completed', 'cancelled']).default('upcoming'), date: z.string().date().optional() }) })), asyncHandler(async (req, res) => res.json({ success: true, data: await workspace.appointments(req.user.doctorProfile.id, req.query) })));
+doctorRouter.get('/clients', requireVerifiedDoctor, validate(payoutListSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await workspace.clients(req.user.doctorProfile.id, req.query) })));
 
 doctorRouter.get('/me', asyncHandler(async (req, res) => res.json({ success: true, data: await doctor.getProfile(req.user.id) })));
 doctorRouter.patch('/me', validate(updateProfileSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await doctor.updateProfile(req.user.id, req.body, { ip: req.ip }) })));
@@ -44,17 +44,17 @@ doctorRouter.post('/change-password', validate(changePasswordSchema), asyncHandl
   res.json({ success: true, data: { changed: true } });
 }));
 
-doctorRouter.get('/availability', asyncHandler(async (req, res) => res.json({ success: true, data: await availability.getWorkingHours(req.user.doctorProfile.id) })));
-doctorRouter.put('/availability', validate(replaceHoursSchema), asyncHandler(async (req, res) => {
+doctorRouter.get('/availability', requireVerifiedDoctor, asyncHandler(async (req, res) => res.json({ success: true, data: await availability.getWorkingHours(req.user.doctorProfile.id) })));
+doctorRouter.put('/availability', requireVerifiedDoctor, validate(replaceHoursSchema), asyncHandler(async (req, res) => {
   const data = await availability.replaceWorkingHours(req.user.id, req.user.doctorProfile.id, req.body, { ip: req.ip });
   res.json({ success: true, data });
 }));
-doctorRouter.get('/blocked-slots', asyncHandler(async (req, res) => res.json({ success: true, data: await availability.listBlockedSlots(req.user.doctorProfile.id) })));
-doctorRouter.post('/blocked-slots', validate(createBlockedSlotSchema), asyncHandler(async (req, res) => {
+doctorRouter.get('/blocked-slots', requireVerifiedDoctor, asyncHandler(async (req, res) => res.json({ success: true, data: await availability.listBlockedSlots(req.user.doctorProfile.id) })));
+doctorRouter.post('/blocked-slots', requireVerifiedDoctor, validate(createBlockedSlotSchema), asyncHandler(async (req, res) => {
   const data = await availability.createBlockedSlot(req.user.id, req.user.doctorProfile.id, req.body, { ip: req.ip });
   res.status(201).json({ success: true, data });
 }));
-doctorRouter.delete('/blocked-slots/:id', validate(blockedIdSchema), asyncHandler(async (req, res) => {
+doctorRouter.delete('/blocked-slots/:id', requireVerifiedDoctor, validate(blockedIdSchema), asyncHandler(async (req, res) => {
   await availability.deleteBlockedSlot(req.user.id, req.user.doctorProfile.id, req.params.id, { ip: req.ip });
   res.json({ success: true, data: { deleted: true } });
 }));

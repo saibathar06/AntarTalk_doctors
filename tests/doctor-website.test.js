@@ -11,7 +11,7 @@ import { readUpload, saveUpload } from '../src/services/upload.service.js';
 const doctor = {
   id: 'doctor', timezone: 'Asia/Kolkata', firstName: 'Test', lastName: 'Professional',
   profileImageUrl: '/photo', professionalCategory: 'PSYCHOLOGIST', professionalStatus: 'LICENSED_PROFESSIONAL',
-  licenseNumber: 'TEST', qualification: 'MSc', experienceYears: 0, bio: 'About care', languages: ['English'], preferredSessionLanguage: 'English', expertise: ['Anxiety'],
+  licenseNumber: 'TEST', qualification: 'MSc', experienceYears: 0, consultationFee: 1200, bio: 'About care', languages: ['English'], preferredSessionLanguage: 'English', expertise: ['Anxiety'],
   verificationStatus: 'VERIFIED', isAcceptingBookings: true, user: { role: 'DOCTOR', accountStatus: 'ACTIVE', emailVerifiedAt: new Date() }
 };
 beforeEach(() => { vi.clearAllMocks(); prisma.doctorProfile.findUnique.mockResolvedValue(doctor); });

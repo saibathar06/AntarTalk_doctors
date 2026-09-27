@@ -1,5 +1,5 @@
 export const profileFields = [
-  'firstName', 'lastName', 'dateOfBirth', 'phoneNumber', 'professionalCategory',
+  'firstName', 'lastName', 'dateOfBirth', 'gender', 'phoneNumber', 'professionalCategory',
   'professionalStatus', 'licenseNumber', 'licenseAuthority', 'university', 'course',
   'specialization', 'expectedGraduationDate', 'enrollmentNumber', 'timezone', 'bio',
   'qualification', 'institution', 'graduationYear', 'experienceYears', 'languages', 'preferredSessionLanguage',

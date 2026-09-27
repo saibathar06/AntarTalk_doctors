@@ -25,7 +25,6 @@ export function AvailabilityPage() {
   const hours = useResource<WorkingHour[]>("/api/doctor/availability");
   const blocks = useResource<Block[]>("/api/doctor/blocked-slots");
   const [windows, setWindows] = useState<WorkingHour[]>([]),
-    [timezone, setTimezone] = useState(profile!.timezone),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
@@ -33,14 +32,14 @@ export function AvailabilityPage() {
   useEffect(() => {
     if (hours.data)
       setWindows(
-        hours.data.map(({ dayOfWeek, startTime, endTime, isActive }) => ({
+        (profile!.timezone === "Asia/Kolkata" ? hours.data : []).map(({ dayOfWeek, startTime, endTime, isActive }) => ({
           dayOfWeek,
           startTime,
           endTime,
           isActive,
         })),
       );
-  }, [hours.data]);
+  }, [hours.data, profile]);
   async function save(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -48,7 +47,7 @@ export function AvailabilityPage() {
     setError("");
     setNotice("");
     try {
-      await mutate("/api/doctor/availability", "PUT", { timezone, windows });
+      await mutate("/api/doctor/availability", "PUT", { timezone: "Asia/Kolkata", windows });
       await reload();
       hours.reload();
       setNotice("Working hours saved.");
@@ -68,10 +67,10 @@ export function AvailabilityPage() {
     setError("");
     try {
       const start = DateTime.fromISO(String(values.startTime), {
-          zone: profile!.timezone,
+          zone: "Asia/Kolkata",
         }),
         end = DateTime.fromISO(String(values.endTime), {
-          zone: profile!.timezone,
+          zone: "Asia/Kolkata",
         });
       if (
         !start.isValid ||
@@ -82,7 +81,7 @@ export function AvailabilityPage() {
         end.getPossibleOffsets().length !== 1
       )
         throw new Error(
-          "Choose an unambiguous local time outside a daylight-saving transition.",
+          "Choose a valid India Standard Time.",
         );
       await mutate("/api/doctor/blocked-slots", "POST", {
         startTime: start.toUTC().toISO(),
@@ -132,9 +131,7 @@ export function AvailabilityPage() {
       return [...current, { dayOfWeek, startTime, endTime, isActive: true }];
     });
   }
-  const zonedNow = DateTime.now().setZone(timezone);
-  const calendarZone = zonedNow.isValid ? timezone : profile!.timezone;
-  const today = DateTime.now().setZone(calendarZone).startOf("day");
+  const today = DateTime.now().setZone("Asia/Kolkata").startOf("day");
   const visibleDays = Array.from({ length: 7 }, (_, offset) => {
     const date = today.plus({ days: offset });
     return {
@@ -148,9 +145,10 @@ export function AvailabilityPage() {
     <>
       <PageHeader
         title="Your time. Your rhythm."
-        description={`Today is ${today.toFormat("cccc, d LLLL yyyy")} in ${calendarZone}. Choose the times clients can book, then protect specific time away when needed.`}
+        description={`Today is ${today.toFormat("cccc, d LLLL yyyy")} in India Standard Time. Choose the times clients can book, then protect specific time away when needed.`}
       />
       <ErrorState message={error || hours.error || blocks.error} />
+      {profile!.timezone !== "Asia/Kolkata" && <p className="alert">Your previous schedule used another timezone. Set fresh weekly hours in IST and save them before clients can book new sessions. Existing appointments keep their original UTC times.</p>}
       {notice && (
         <p className="alert" role="status">
           {notice}
@@ -165,20 +163,7 @@ export function AvailabilityPage() {
                   Set the hours for each dated day below. They repeat every week on that weekday until you change them.
               </p>
             </div>
-            <label>
-              Practice timezone
-              <input
-                list="timezones"
-                value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-                required
-              />
-              <datalist id="timezones">
-                {Intl.supportedValuesOf("timeZone").map((zone) => (
-                  <option value={zone} key={zone} />
-                ))}
-              </datalist>
-            </label>
+            <span className="help">All availability uses India Standard Time (IST).</span>
           </div>
           {hours.loading ? (
             <LoadingState />
@@ -278,7 +263,7 @@ export function AvailabilityPage() {
       <section className="card">
         <h2>Time away</h2>
         <p>
-           Use this for leave, meetings, or personal time in {profile!.timezone}. It removes only the selected period from availability; your weekly hours remain unchanged. Existing bookings must be resolved before blocking an overlap.
+           Use this for leave, meetings, or personal time in India Standard Time. It removes only the selected period from availability; your weekly hours remain unchanged. Existing bookings must be resolved before blocking an overlap.
         </p>
         <form onSubmit={block}>
           <fieldset disabled={busy}>
@@ -305,12 +290,12 @@ export function AvailabilityPage() {
               <div className="blocked-item" key={item.id}>
                 <div>
                   <strong>
-                    {formatDate(item.startTime, profile!.timezone)} ·{" "}
-                    {formatTime(item.startTime, profile!.timezone)}
+                    {formatDate(item.startTime, "Asia/Kolkata")} ·{" "}
+                    {formatTime(item.startTime, "Asia/Kolkata")}
                   </strong>
                   <p>
-                    Until {formatDate(item.endTime, profile!.timezone)} ·{" "}
-                    {formatTime(item.endTime, profile!.timezone)}
+                    Until {formatDate(item.endTime, "Asia/Kolkata")} ·{" "}
+                    {formatTime(item.endTime, "Asia/Kolkata")}
                   </p>
                   <small>{item.reason}</small>
                 </div>

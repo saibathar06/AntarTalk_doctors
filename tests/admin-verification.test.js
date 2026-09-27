@@ -10,8 +10,8 @@ beforeEach(() => {
     id: '87654321-1234-4234-8234-123456789abc', firstName: 'Review', lastName: 'Doctor', phoneNumber: '+919876543210',
     professionalCategory: 'PSYCHOLOGIST', professionalStatus: 'LICENSED_PROFESSIONAL', licenseNumber: 'LIC-1', licenseAuthority: 'Authority',
     university: null, course: null, specialization: null, expectedGraduationDate: null, enrollmentNumber: null,
-    qualification: 'MSc Psychology', institution: 'University', graduationYear: 2020, experienceYears: 3, bio: 'Care focused',
-    languages: ['English'], preferredSessionLanguage: 'English', expertise: ['Anxiety'], licenseDocumentUrl: '/api/doctor/files/11111111-1111-4111-8111-111111111111.pdf', profileImageUrl: null,
+    qualification: 'MSc Psychology', institution: 'University', graduationYear: 2020, experienceYears: 3, consultationFee: 1200, bio: 'Care focused',
+    languages: ['English'], preferredSessionLanguage: 'English', expertise: ['Anxiety'], licenseDocumentUrl: '/api/doctor/files/11111111-1111-4111-8111-111111111111.pdf', profileImageUrl: '/api/doctor/files/22222222-2222-4222-8222-222222222222.jpg',
     timezone: 'Asia/Kolkata', verificationStatus: 'PENDING', verificationSubmittedAt: new Date('2030-01-01T10:00:00Z'), verificationReason: null,
     isAcceptingBookings: false, updatedAt: new Date('2030-01-01T11:00:00Z'), user: { email: 'review@example.test' }
   };
@@ -45,6 +45,16 @@ describe('admin verification queue', () => {
     expect(prisma.doctorProfile.update).toHaveBeenCalledWith(expect.objectContaining({ data: { verificationStatus: 'REJECTED', verificationReason: 'Please upload a current credential document.', isAcceptingBookings: false } }));
     expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'DOCTOR_VERIFICATION_REJECTED', actorId: admin.id }) }));
     expect(result.verificationStatus).toBe('REJECTED');
+  });
+  it('enables bookings automatically when approving a complete submitted profile', async () => {
+    const result = await decideVerification(admin.id, profile.id, { status: 'VERIFIED', expectedUpdatedAt: profile.updatedAt });
+    expect(prisma.doctorProfile.findFirst.mock.calls[0][0].select).toMatchObject({ consultationFee: true, timezone: true, profileImageUrl: true });
+    expect(prisma.doctorProfile.update).toHaveBeenCalledWith(expect.objectContaining({ data: { verificationStatus: 'VERIFIED', verificationReason: null, isAcceptingBookings: true } }));
+    expect(result.isAcceptingBookings).toBe(true);
+  });
+  it('refuses approval if the submitted profile is no longer complete', async () => {
+    profile.bio = null;
+    await expect(decideVerification(admin.id, profile.id, { status: 'VERIFIED', expectedUpdatedAt: profile.updatedAt })).rejects.toMatchObject({ code: 'PROFILE_INCOMPLETE' });
   });
   it('rejects a stale decision when the profile changed after the admin opened it', async () => {
     await expect(decideVerification(admin.id, profile.id, { status: 'VERIFIED', expectedUpdatedAt: new Date('2030-01-01T09:00:00Z') })).rejects.toMatchObject({ code: 'VERIFICATION_REQUEST_CHANGED' });

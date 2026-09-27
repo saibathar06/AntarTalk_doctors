@@ -8,6 +8,7 @@ import {
   WalletIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "../auth";
+import { PayoutPanel } from "./PayoutPanel";
 import {
   AppointmentCard,
   EmptyState,
@@ -53,16 +54,16 @@ export function DashboardPage() {
         title={`${greeting}, ${name}.`}
         description={
           profileUnderReview
-            ? "Your profile is under review. Once approved, you can enable bookings and become eligible to take sessions."
+            ? "Your profile is under review. Once approved, bookings will be enabled automatically and you can set your availability."
             : resource.data
             ? `You have ${resource.data.todaySessions} sessions today. Let's make room for meaningful conversations.`
             : "Your day, thoughtfully organized."
         }
       >
-        <Link className="button secondary" to="/doctor/appointments">
+        {profile!.verificationStatus === "VERIFIED" && <Link className="button secondary" to="/doctor/appointments">
           <CalendarDotsIcon />
           View appointments
-        </Link>
+        </Link>}
       </PageHeader>
       <ErrorState message={resource.error} />
       {!profileUnderReview && !profile!.profileCompleted && <ProfileCompletionCard profile={profile!} />}
@@ -116,9 +117,9 @@ export function DashboardPage() {
                   <h2>Today's schedule</h2>
                   <p>All times in {profile!.timezone}</p>
                 </div>
-                <Link to="/doctor/appointments">
+                {profile!.verificationStatus === "VERIFIED" && <Link to="/doctor/appointments">
                   All appointments <ArrowRightIcon />
-                </Link>
+                </Link>}
               </div>
               {resource.data.schedule.items.length ? (
                 resource.data.schedule.items.map((item) => (
@@ -142,9 +143,9 @@ export function DashboardPage() {
             Each appointment includes protected buffer time. Your working hours
             stay entirely in your hands.
           </p>
-          <Link to="/doctor/availability">
+          {profile!.verificationStatus === "VERIFIED" && <Link to="/doctor/availability">
             Manage availability <ArrowRightIcon />
-          </Link>
+          </Link>}
         </section>
         <section className="card">
           <h2>Your practice status</h2>
@@ -354,10 +355,7 @@ function VerifiedEarnings() {
           )
         )}
       </section>
-      <p className="help">
-        Amounts come from the earnings ledger. Automated bank payouts are not
-        connected in this release.
-      </p>
+      <PayoutPanel />
     </>
   );
 }

@@ -8,6 +8,7 @@ import { prisma } from '../src/lib/prisma.js';
 import { readOwnedReservation, assertStructurallyBookable, deleteReservationIfOwned } from '../src/services/slot.service.js';
 import { confirmBooking } from '../src/services/booking.service.js';
 import { withdraw } from '../src/services/payout.service.js';
+import { encryptProviderToken } from '../src/utils/encryption.js';
 
 let records, bookings, payouts, tail;
 const start = new Date('2030-01-01T14:00:00Z');
@@ -31,13 +32,13 @@ beforeEach(() => {
       findUnique: vi.fn(async ({ where }) => records.get(recordKey(where)) ?? null),
       create: vi.fn(async ({ data }) => records.set(recordKey({ userId_scope_key: { userId: data.userId, scope: data.scope, key: data.key } }), data))
     },
-    earning: { aggregate: vi.fn(async () => ({ _sum: { amount: new Prisma.Decimal(100) } })) },
+    earning: { aggregate: vi.fn(async () => ({ _sum: { amount: new Prisma.Decimal(1000) } })) },
     earningReversal: { aggregate: vi.fn(async () => ({ _sum: { amount: new Prisma.Decimal(0) } })) },
     payoutTransaction: {
       aggregate: vi.fn(async () => ({ _sum: { amount: new Prisma.Decimal(payouts.reduce((sum, p) => sum + Number(p.amount), 0)) } })),
       create: vi.fn(async ({ data }) => { const value = { ...data, id: 'payout' }; payouts.push(value); return value; })
     },
-    payoutAccount: { findFirst: vi.fn(async () => ({ id: 'account' })) },
+    payoutAccount: { findFirst: vi.fn(async () => ({ id: 'account', encryptedProviderDetails: encryptProviderToken(JSON.stringify({ type: 'UPI', upiId: 'test@bank' })) })) },
     auditLog: { create: vi.fn() }
   });
   // Service concurrency model; real PostgreSQL lock/exclusion tests are a separate integration gate.
@@ -81,21 +82,31 @@ describe('booking retry regressions', () => {
   });
 });
 describe('withdrawal retry regressions', () => {
-  const request = { amount: 80, currency: 'INR', payoutAccountId: 'account' };
+  const request = { amount: 800, currency: 'INR', payoutAccountId: 'account' };
+  const tuesday = { now: new Date('2030-01-01T09:00:00Z') };
   it('simultaneous identical withdrawals produce one payout', async () => {
-    await Promise.all(Array.from({ length: 10 }, () => withdraw('doctor-user', 'doctor', request, 'same-key')));
+    await Promise.all(Array.from({ length: 10 }, () => withdraw('doctor-user', 'doctor', request, 'same-key', tuesday)));
     expect(payouts).toHaveLength(1);
   });
   it('concurrent different withdrawals cannot spend the same available earnings twice', async () => {
     const results = await Promise.allSettled([
-      withdraw('doctor-user', 'doctor', request, 'key-one'),
-      withdraw('doctor-user', 'doctor', request, 'key-two')
+      withdraw('doctor-user', 'doctor', request, 'key-one', tuesday),
+      withdraw('doctor-user', 'doctor', request, 'key-two', tuesday)
     ]);
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     expect(payouts).toHaveLength(1);
   });
   it('rejects another doctors payout account', async () => {
     prisma.payoutAccount.findFirst.mockResolvedValue(null);
-    await expect(withdraw('doctor-user', 'doctor', request, 'key')).rejects.toMatchObject({ code: 'PAYOUT_ACCOUNT_NOT_FOUND' });
+    await expect(withdraw('doctor-user', 'doctor', request, 'key', tuesday)).rejects.toMatchObject({ code: 'PAYOUT_ACCOUNT_NOT_FOUND' });
+  });
+  it('enforces the Tuesday IST window and the ₹500 minimum', async () => {
+    await expect(withdraw('doctor-user', 'doctor', { ...request, amount: 499 }, 'minimum', tuesday)).rejects.toMatchObject({ code: 'PAYOUT_MINIMUM_NOT_MET' });
+    await expect(withdraw('doctor-user', 'doctor', request, 'monday', { now: new Date('2029-12-31T09:00:00Z') })).rejects.toMatchObject({ code: 'PAYOUT_DAY_RESTRICTED' });
+    expect(payouts).toHaveLength(0);
+  });
+  it('opens requests at Tuesday midnight in India rather than UTC midnight', async () => {
+    await expect(withdraw('doctor-user', 'doctor', request, 'before-midnight', { now: new Date('2029-12-31T18:29:59Z') })).rejects.toMatchObject({ code: 'PAYOUT_DAY_RESTRICTED' });
+    await expect(withdraw('doctor-user', 'doctor', request, 'after-midnight', { now: new Date('2029-12-31T18:30:00Z') })).resolves.toMatchObject({ status: 'PENDING' });
   });
 });

@@ -55,6 +55,10 @@ function DoctorLayout() {
   if (loading) return <LoadingState />;
   if (viewer?.role === "ADMIN") return <Navigate to="/doctor/admin" replace />;
   if (!profile) return <Navigate to="/doctor/login" replace />;
+  const verified = profile.verificationStatus === "VERIFIED";
+  if (!verified && !["/doctor", "/doctor/dashboard", "/doctor/profile", "/doctor/settings"].includes(location.pathname)) {
+    return <Navigate to="/doctor/dashboard" replace />;
+  }
   async function signOut() {
     setBusy(true);
     try {
@@ -92,7 +96,7 @@ function DoctorLayout() {
         </button>
         <p className="nav-label">YOUR WORKSPACE</p>
         <nav aria-label="Doctor navigation">
-          {links.map(([path, label, Icon]) => (
+          {links.filter(([path]) => verified || ["dashboard", "profile", "settings"].includes(path)).map(([path, label, Icon]) => (
             <NavLink
               key={path}
               to={`/doctor/${path}`}

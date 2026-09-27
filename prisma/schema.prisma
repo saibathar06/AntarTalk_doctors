@@ -30,6 +30,14 @@ enum ProfessionalStatus {
   FINAL_YEAR_STUDENT
 }
 
+enum Gender {
+  FEMALE
+  MALE
+  NON_BINARY
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
 enum VerificationStatus {
   PENDING
   VERIFIED
@@ -103,6 +111,7 @@ model DoctorProfile {
   firstName                String               @db.VarChar(100)
   lastName                 String               @db.VarChar(100)
   dateOfBirth              DateTime             @db.Date
+  gender                   Gender?
   phoneNumber              String               @unique @db.VarChar(32)
   professionalCategory     ProfessionalCategory
   professionalStatus       ProfessionalStatus
@@ -116,7 +125,7 @@ model DoctorProfile {
   specialization           String?              @db.VarChar(200)
   expectedGraduationDate   DateTime?            @db.Date
   enrollmentNumber         String?              @db.VarChar(100)
-  timezone                 String               @default("UTC") @db.VarChar(64)
+  timezone                 String               @default("Asia/Kolkata") @db.VarChar(64)
   bio                      String?              @db.VarChar(2000)
   profileImageUrl           String?              @db.VarChar(300)
   licenseDocumentUrl        String?              @db.VarChar(300)

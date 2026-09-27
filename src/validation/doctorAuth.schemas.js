@@ -3,9 +3,11 @@ import { dateOfBirth, email, password, phone } from './common.js';
 
 export const websiteRegisterSchema = z.object({ body: z.object({
   firstName: z.string().trim().min(1).max(100), lastName: z.string().trim().min(1).max(100),
-  email, password, phoneNumber: phone, dateOfBirth, licenseNumber: z.string().trim().min(2).max(100),
+  email, password, phoneNumber: phone, dateOfBirth,
+  gender: z.enum(['FEMALE', 'MALE', 'NON_BINARY', 'OTHER', 'PREFER_NOT_TO_SAY']),
+  licenseNumber: z.string().trim().min(2).max(100),
   professionalCategory: z.enum(['PSYCHIATRIST', 'PSYCHOLOGIST', 'COUNSELLOR']),
-  timezone: z.string().min(1).max(64).default('UTC')
+  timezone: z.literal('Asia/Kolkata').default('Asia/Kolkata')
 }).strict() });
 
 export const websiteLoginSchema = z.object({ body: z.object({ email, password: z.string().min(1).max(128) }).strict() });

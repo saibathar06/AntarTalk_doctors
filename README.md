@@ -58,19 +58,21 @@ Razorpay orders are created by the API from the doctor’s stored `consultationF
 
 ## How it works
 
-- Signup collects first name, last name, email, password and core professional details. Login requires email + password, followed by an email OTP. Passwords use Argon2id hashes. Deploy the backend and website together for this updated contract.
+- Signup collects first name, last name, gender, email, password and core professional details. Login requires email + password, followed by an email OTP. Passwords use Argon2id hashes. Deploy the backend and website together for this updated contract.
 - The same login accepts DOCTOR and ADMIN accounts. Doctors open their workspace; administrators open the small verification-review queue. CLIENT accounts cannot use this app.
-- A complete doctor profile is explicitly submitted for review. Admins can approve or reject it with an audit trail; approval keeps bookings disabled until the doctor opts in.
-- Account verification, profile completion, professional approval and accepting bookings are separate gates. Existing professionals must complete new profile fields before new bookings/join access.
-- Dashboard, appointments, clients, profile, uploads, availability, settings and earnings use real APIs. No production demo data.
+- A complete doctor profile, including a profile photo and consultation fee, is submitted for review. Admin approval automatically enables accepting bookings; the doctor can subsequently pause or resume bookings in settings. Unverified doctors can use only dashboard, profile and settings; the API also denies their availability, appointment, client, session, earning and payout routes.
+- Account verification, profile completion, professional approval and accepting bookings remain separate backend gates. Existing professionals must complete newly required profile fields before new bookings/join access.
+- Dashboard, appointments, clients, profile, uploads, availability, settings and earnings use real APIs. No production demo data. Public doctor discovery includes gender when supplied, except `PREFER_NOT_TO_SAY`.
 - PostgreSQL owns bookings and financial records; Redis owns temporary 180-second holds. Shared exclusion constraints prevent conflicting bookings.
 - Default window: **40 minutes therapy + 20 minutes protected buffer = one 60-minute booking**. Configurable via environment.
-- Appointment timestamps are UTC; recurring hours use the doctor's IANA timezone. Overnight `23:00–03:00` ends the next day.
+- Appointment timestamps remain UTC. New doctor profiles and recurring hours use only `Asia/Kolkata` (IST); overnight `23:00–03:00` ends the next day. Existing appointments retain their UTC timestamps. A legacy non-IST practice must save its profile as IST and recreate its weekly hours; old hours are disabled instead of being silently relabelled.
+- Doctors may request INR withdrawals only on Tuesday in IST, with a ₹500 minimum and available earned funds. Requests remain `PENDING` until admin review. Approval moves them to `PROCESSING`; rejection releases the allocation. With no payout provider configured, the admin must make the real transfer outside the app and then record its reference to mark the payout `COMPLETED`. Approval alone never transfers funds.
+- UPI/bank destination details are encrypted at rest with the existing backend-only `PAYOUT_ENCRYPTION_KEY` (64 hexadecimal characters); keep this key stable and private. Only admins can read the destination for a specific withdrawal. Older opaque-token payout accounts must be replaced with a UPI or bank destination before requesting a transfer.
 - Access JWTs stay in memory; rotating refresh tokens use an HttpOnly cookie. All doctor APIs enforce authentication and ownership.
 
 ## Build and verify
 
-`npm run db:migrate`, then `npm test`, `npm run lint`, `npm run typecheck`, `npm run db:validate`.
+Deploy the additive gender/IST migration with `npm run db:migrate`, then run `npm test`, `npm run lint`, `npm run typecheck`, `npm run db:validate`.
 
 Website: `npm --prefix web run lint`, `npm run web:build`, `npm run web:test`. Install the browser first with `npm --prefix web exec -- playwright install chromium`. Browser tests use isolated API fixtures; four backend infrastructure tests require disposable PostgreSQL/Redis URLs.
 

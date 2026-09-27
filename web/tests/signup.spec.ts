@@ -36,6 +36,7 @@ for (const scenario of ["success", "gateway", "email"] as const) {
         "dateOfBirth",
         "email",
         "firstName",
+        "gender",
         "lastName",
         "licenseNumber",
         "password",
@@ -86,6 +87,7 @@ for (const scenario of ["success", "gateway", "email"] as const) {
     await page.getByLabel("Country / code").selectOption("+91");
     await page.getByLabel("Mobile number").fill("9876543210");
     await page.getByLabel("Date of birth").fill("1990-01-01");
+    await page.getByLabel("Gender").selectOption("FEMALE");
     await page.getByLabel("Professional category").selectOption("PSYCHOLOGIST");
     await page
       .getByLabel("License / registration number")

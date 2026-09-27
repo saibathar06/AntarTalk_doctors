@@ -69,7 +69,10 @@ export async function updateProfile(userId, input, context = {}) {
     if (freshProfile.updatedAt.getTime() !== current.updatedAt.getTime() || freshUser.email !== current.email) throw new AppError(409, 'PROFILE_CHANGED', 'Profile changed concurrently. Reload before retrying.');
     if (emailChanged) await tx.otpChallenge.updateMany({ where: { userId, consumedAt: null }, data: { consumedAt: new Date() } });
     const profile = await tx.doctorProfile.update({ where: { userId }, data, select: doctorProfileSelect });
-    if (profileInput.timezone) await tx.doctorWorkingHour.updateMany({ where: { doctorId: current.id }, data: { timezone: profileInput.timezone } });
+    if (profileInput.timezone && profileInput.timezone !== current.timezone) {
+      // Existing wall-clock hours cannot be relabelled as IST without shifting actual appointments.
+      await tx.doctorWorkingHour.updateMany({ where: { doctorId: current.id }, data: { timezone: profileInput.timezone, isActive: false } });
+    }
     if (emailChanged) {
       updatedUser = await tx.user.update({ where: { id: userId }, data: { email, emailVerifiedAt: null, tokenVersion: { increment: 1 } }, select: { id: true, email: true } });
       await tx.doctorProfile.update({ where: { userId }, data: { isAcceptingBookings: false } });
@@ -110,7 +113,7 @@ export async function deleteAccount(userId, context = {}) {
       where: { id: profile.id },
       data: {
         firstName: 'Deleted', lastName: 'User', phoneNumber: crypto.randomBytes(16).toString('hex'),
-        dateOfBirth: new Date('1970-01-01T00:00:00Z'), expectedGraduationDate: null,
+        dateOfBirth: new Date('1970-01-01T00:00:00Z'), gender: null, expectedGraduationDate: null,
         licenseNumber: null, licenseAuthority: null, university: null, course: null,
         specialization: null, enrollmentNumber: null, bio: null, isAcceptingBookings: false,
         profileImageUrl: null, licenseDocumentUrl: null, qualification: null, institution: null,

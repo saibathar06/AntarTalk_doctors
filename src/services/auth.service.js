@@ -134,7 +134,7 @@ export async function registerDoctor(input, context = {}) {
     const doctorData = profileData(profile);
     const doctorProfile = await tx.doctorProfile.create({ data: {
       ...doctorData, userId: created.id, firstName: profile.firstName, lastName: profile.lastName,
-      dateOfBirth: profile.dateOfBirth, phoneNumber: profile.phoneNumber,
+      dateOfBirth: profile.dateOfBirth, gender: profile.gender, phoneNumber: profile.phoneNumber,
       professionalCategory: profile.professionalCategory, professionalStatus: profile.professionalStatus
     }, select: doctorProfileSelect });
     await recordAudit({ actorId: created.id, action: 'DOCTOR_REGISTERED', entityType: 'DoctorProfile', entityId: doctorProfile.id, ipAddress: context.ip }, tx);
