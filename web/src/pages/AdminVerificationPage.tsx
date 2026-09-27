@@ -27,6 +27,8 @@ export function AdminVerificationPage() {
   const { logout } = useAuth();
   const [view, setView] = useState<"queue" | "doctors" | "payouts">("queue");
   const [payoutStatus, setPayoutStatus] = useState<AdminPayout["status"]>("PENDING");
+  const [doctorSearch, setDoctorSearch] = useState("");
+  const [appliedDoctorSearch, setAppliedDoctorSearch] = useState("");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<VerificationRequest | null>(null);
   const [reason, setReason] = useState("");
@@ -38,7 +40,7 @@ export function AdminVerificationPage() {
     ? `/api/admin/payouts?page=${page}&limit=25&status=${payoutStatus}`
     : view === "queue"
     ? `/api/admin/verification-requests?page=${page}&limit=25`
-    : `/api/admin/doctors?page=${page}&limit=25`;
+    : `/api/admin/doctors?page=${page}&limit=25${appliedDoctorSearch ? `&search=${encodeURIComponent(appliedDoctorSearch)}` : ""}`;
   const { data, error, loading, reload } = useResource<Page<VerificationRequest>>(path);
   const canReview = selected?.verificationStatus === "PENDING" && Boolean(selected.verificationSubmittedAt);
 
@@ -48,6 +50,10 @@ export function AdminVerificationPage() {
     setSelected(null);
     setReason("");
     setActionError("");
+    if (next !== "doctors") {
+      setDoctorSearch("");
+      setAppliedDoctorSearch("");
+    }
   }
   async function decide(status: "VERIFIED" | "REJECTED") {
     if (!selected || !canReview) return;
@@ -120,7 +126,7 @@ export function AdminVerificationPage() {
         <header className="admin-topbar">
           <div>
             <p className="eyebrow">ANTARTALK · ADMIN</p>
-            <h1>Professional verification</h1>
+            <h1>AntarTalk Admin Panel</h1>
           </div>
           <button className="button secondary small" disabled={busy} onClick={signOut}>
             <SignOutIcon /> Log out
@@ -131,7 +137,7 @@ export function AdminVerificationPage() {
           title={view === "queue" ? "Review submitted profiles" : view === "doctors" ? "Doctor directory" : "Review withdrawals"}
           description={view === "queue"
             ? "Approve credentials or return a clear reason. Approval enables bookings automatically."
-            : view === "doctors" ? "Browse professional profiles and their verification status. This directory contains no client or clinical data."
+            : view === "doctors" ? "Search active, verified doctors by name. Client and administrator accounts never appear here."
               : "Review withdrawal requests, then record the transfer after money reaches the doctor's account."}
         />
         <div className="admin-tabs" role="tablist" aria-label="Administrator views">
@@ -146,11 +152,24 @@ export function AdminVerificationPage() {
         /> : <>
         <ErrorState message={error || actionError} />
         {notice && <div className="alert" role="status">{notice}</div>}
+        {view === "doctors" && <form className="admin-directory-search" onSubmit={(event) => {
+          event.preventDefault();
+          setPage(1);
+          setSelected(null);
+          setAppliedDoctorSearch(doctorSearch.trim());
+        }}>
+          <label htmlFor="doctor-directory-search">Search verified doctors</label>
+          <div>
+            <input id="doctor-directory-search" value={doctorSearch} onChange={(event) => setDoctorSearch(event.target.value)} maxLength={100} placeholder="Search by first or last name" />
+            <button type="submit" className="button small" disabled={loading}>Search</button>
+            {appliedDoctorSearch && <button type="button" className="button secondary small" onClick={() => { setDoctorSearch(""); setAppliedDoctorSearch(""); setPage(1); setSelected(null); }}>Clear</button>}
+          </div>
+        </form>}
         {loading ? <LoadingState label={view === "queue" ? "Loading review requests…" : "Loading doctors…"} />
-          : !data?.items.length ? <section className="card"><EmptyState title={view === "queue" ? "No profiles are waiting for review" : "No doctor profiles yet"}>{view === "queue" ? "Submitted, complete professional profiles appear here." : "Doctor profiles will appear here after registration."}</EmptyState></section>
+          : !data?.items.length ? <section className="card"><EmptyState title={view === "queue" ? "No profiles are waiting for review" : "No verified doctors found"}>{view === "queue" ? "Submitted, complete professional profiles appear here." : appliedDoctorSearch ? "Try another first or last name." : "Verified doctor profiles will appear here after approval."}</EmptyState></section>
             : <div className="admin-review-grid">
               <section className="card admin-queue">
-                <h2>{data.pagination.total} {view === "queue" ? "awaiting review" : "doctor profiles"}</h2>
+                <h2>{data.pagination.total} {view === "queue" ? "awaiting review" : "verified doctors"}</h2>
                 {data.items.map((doctor) => <button key={doctor.id} className={`review-row ${selected?.id === doctor.id ? "selected" : ""}`} onClick={() => { setSelected(doctor); setReason(""); setActionError(""); }}>
                   <strong>{doctor.firstName} {doctor.lastName}</strong>
                   <span>{doctor.professionalCategory.replace("_", " ")} · {doctor.verificationStatus}</span>

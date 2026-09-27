@@ -34,10 +34,18 @@ describe('admin verification queue', () => {
     expect(result.items[0]).toMatchObject({ email: 'review@example.test', hasLicenseDocument: true });
     expect(result.items[0]).not.toHaveProperty('user');
   });
-  it('lists doctor profiles separately from the submitted verification queue', async () => {
-    const result = await listDoctors({ page: 1, limit: 20 });
-    expect(prisma.doctorProfile.findMany.mock.calls[0][0].where).toBeUndefined();
-    expect(result.items[0]).toMatchObject({ id: profile.id, verificationStatus: 'PENDING' });
+  it('lists only active verified doctor-role profiles and supports name search', async () => {
+    profile.verificationStatus = 'VERIFIED';
+    const result = await listDoctors({ page: 1, limit: 20, search: 'Review Doctor' });
+    expect(prisma.doctorProfile.findMany.mock.calls[0][0].where).toEqual({
+      verificationStatus: 'VERIFIED',
+      user: { is: { role: 'DOCTOR', accountStatus: 'ACTIVE' } },
+      AND: [
+        { OR: [{ firstName: { contains: 'Review', mode: 'insensitive' } }, { lastName: { contains: 'Review', mode: 'insensitive' } }] },
+        { OR: [{ firstName: { contains: 'Doctor', mode: 'insensitive' } }, { lastName: { contains: 'Doctor', mode: 'insensitive' } }] }
+      ]
+    });
+    expect(result.items[0]).toMatchObject({ id: profile.id, verificationStatus: 'VERIFIED' });
     expect(result.items[0]).not.toHaveProperty('user');
   });
   it('rejects with a recorded reason, keeps bookings off, and records an audit event', async () => {

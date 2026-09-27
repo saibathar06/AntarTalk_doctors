@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma.js';
+import { Prisma } from '@prisma/client';
 import { AppError } from '../errors/AppError.js';
 import { recordAudit } from './audit.service.js';
 import { profileCompletion } from './eligibility.service.js';
@@ -31,17 +32,32 @@ export async function listVerificationQueue({ page, limit }) {
   return { items: items.map(serialize), pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
 }
 
-export async function listDoctors({ page, limit, status }) {
-  const where = status ? { verificationStatus: status } : undefined;
+export async function listDoctors({ page, limit, search }) {
+  const terms = (search ?? '').trim().split(/\s+/).filter(Boolean);
+  // A DoctorProfile is not itself authorization proof. Keep the directory scoped
+  // to active doctor-role accounts as well as verified professional profiles.
+  /** @type {Prisma.DoctorProfileWhereInput} */
+  const where = {
+    verificationStatus: 'VERIFIED',
+    user: { is: { role: 'DOCTOR', accountStatus: 'ACTIVE' } },
+    ...(terms.length ? {
+      AND: terms.map((term) => ({
+        OR: [
+          { firstName: { contains: term, mode: 'insensitive' } },
+          { lastName: { contains: term, mode: 'insensitive' } }
+        ]
+      }))
+    } : {})
+  };
   const [items, total] = await Promise.all([
-    prisma.doctorProfile.findMany({ where, select: reviewSelect, orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }], skip: (page - 1) * limit, take: limit }),
+    prisma.doctorProfile.findMany({ where, select: reviewSelect, orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }, { id: 'asc' }], skip: (page - 1) * limit, take: limit }),
     prisma.doctorProfile.count({ where })
   ]);
   return { items: items.map(serialize), pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
 }
 
 export async function getDoctorForAdmin(id) {
-  const profile = await prisma.doctorProfile.findUnique({ where: { id }, select: reviewSelect });
+  const profile = await prisma.doctorProfile.findFirst({ where: { id, verificationStatus: 'VERIFIED', user: { is: { role: 'DOCTOR', accountStatus: 'ACTIVE' } } }, select: reviewSelect });
   if (!profile) throw new AppError(404, 'DOCTOR_NOT_FOUND', 'Doctor profile not found.');
   return serialize(profile);
 }

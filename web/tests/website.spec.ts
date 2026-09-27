@@ -429,6 +429,33 @@ test("admin sees only the verification queue and can reject with a reason", asyn
     expectedUpdatedAt: review.updatedAt,
   });
 });
+test("admin searches the verified doctor directory by name", async ({ page }) => {
+  const directoryDoctor = {
+    id: "22222222-2222-4222-8222-222222222222", firstName: "Asha", lastName: "Sharma", email: "asha@example.test", phoneNumber: "+919876543210",
+    gender: "FEMALE", professionalCategory: "PSYCHOLOGIST", professionalStatus: "LICENSED_PROFESSIONAL", licenseNumber: "LIC-12345", licenseAuthority: null,
+    university: null, course: null, specialization: null, expectedGraduationDate: null, enrollmentNumber: null, qualification: "MSc Psychology", institution: null,
+    graduationYear: null, experienceYears: 5, consultationFee: "1200.00", bio: "Verified professional.", languages: ["English"], preferredSessionLanguage: "English", expertise: ["Anxiety"],
+    profileImageUrl: null, licenseDocumentUrl: null, hasLicenseDocument: false, verificationStatus: "VERIFIED", verificationSubmittedAt: "2030-01-01T10:00:00Z", verificationReason: null,
+    isAcceptingBookings: true, updatedAt: "2030-01-01T10:01:00Z", timezone: "Asia/Kolkata",
+  };
+  await page.route("**/api/**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/refresh")) return route.fulfill({ json: { success: true, data: { accessToken: "admin-token" } } });
+    if (url.pathname.endsWith("/auth/me")) return route.fulfill({ json: { success: true, data: { id: "admin", role: "ADMIN" } } });
+    if (url.pathname.endsWith("/doctors")) return route.fulfill({ json: { success: true, data: { items: [directoryDoctor], pagination: { page: 1, limit: 25, total: 1, pages: 1 } } } });
+    return route.fulfill({ json: { success: true, data: { items: [], pagination: { page: 1, limit: 25, total: 0, pages: 0 } } } });
+  });
+  await page.goto("/doctor/admin");
+  await expect(page.getByRole("heading", { name: "AntarTalk Admin Panel" })).toBeVisible();
+  await page.getByRole("tab", { name: "All doctors" }).click();
+  await expect(page.getByLabel("Search verified doctors")).toBeVisible();
+  await page.getByLabel("Search verified doctors").fill("Asha Sharma");
+  const request = page.waitForRequest((item) => item.url().includes("/api/admin/doctors?") && item.url().includes("search=Asha%20Sharma"));
+  await page.getByRole("button", { name: "Search" }).click();
+  await request;
+  await expect(page.getByRole("button", { name: /Asha Sharma/ })).toBeVisible();
+  await expect(page.getByText("1 verified doctors")).toBeVisible();
+});
 test("admin reviews a payout before recording its transfer", async ({ page }) => {
   const payoutId = "22222222-2222-4222-8222-222222222222";
   let status = "PENDING";

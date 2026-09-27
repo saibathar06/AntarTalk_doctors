@@ -21,7 +21,7 @@ const decision = z.object({
 });
 adminRouter.get('/verification-requests', validate(z.object({ query: z.object({ ...pagination }) })), asyncHandler(async (req, res) => res.json({ success: true, data: await verification.listVerificationQueue(req.query) })));
 adminRouter.get('/verification-requests/:id', validate(reviewId), asyncHandler(async (req, res) => res.json({ success: true, data: await verification.getVerificationReview(req.params.id) })));
-adminRouter.get('/doctors', validate(z.object({ query: z.object({ ...pagination, status: z.enum(['PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED']).optional() }) })), asyncHandler(async (req, res) => res.json({ success: true, data: await verification.listDoctors(req.query) })));
+adminRouter.get('/doctors', validate(z.object({ query: z.object({ ...pagination, search: z.string().trim().max(100).optional() }) })), asyncHandler(async (req, res) => res.json({ success: true, data: await verification.listDoctors(req.query) })));
 adminRouter.get('/doctors/:id', validate(reviewId), asyncHandler(async (req, res) => res.json({ success: true, data: await verification.getDoctorForAdmin(req.params.id) })));
 adminRouter.patch('/doctors/:id/verification', validate(decision), asyncHandler(async (req, res) => res.json({ success: true, data: await verification.decideVerification(req.user.id, req.params.id, req.body, { ip: req.ip }) })));
 adminRouter.get('/doctors/:id/license-document', validate(reviewId), asyncHandler(async (req, res) => {

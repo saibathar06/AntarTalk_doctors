@@ -114,7 +114,7 @@ Doctors explicitly submit a complete profile with `POST /api/doctor/verification
 | --- | --- | --- |
 | GET `/api/admin/verification-requests?page=1&limit=25` | ADMIN | Submitted PENDING review queue only |
 | GET `/api/admin/verification-requests/:id` | ADMIN | One submitted profile’s review-safe professional details |
-| GET `/api/admin/doctors?page=1&limit=25&status?` | ADMIN | Paginated doctor directory; optional verification status filter |
+| GET `/api/admin/doctors?page=1&limit=25&search?` | ADMIN | Paginated directory of active, verified DOCTOR accounts only; optional case-insensitive first/last-name search |
 | GET `/api/admin/doctors/:id` | ADMIN | One doctor’s professional profile, never client or clinical data |
 | GET `/api/admin/doctors/:id/license-document` | ADMIN | Attached credential document for a doctor profile; authenticated download |
 | PATCH `/api/admin/doctors/:id/verification` | ADMIN | Body `{status: "VERIFIED" | "REJECTED", expectedUpdatedAt, reason?}`; rejection requires a reason |

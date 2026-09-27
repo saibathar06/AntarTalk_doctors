@@ -136,6 +136,12 @@
     flex-direction: column-reverse;
   }
   .profile-edit-actions .button { width: 100%; }
+  .admin-directory-search,
+  .admin-directory-search > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .admin-directory-search input { max-width: none; }
 }
 @media (max-width: 760px) {
   .sidebar {
