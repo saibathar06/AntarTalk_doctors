@@ -10,6 +10,24 @@ import { recordAudit } from './audit.service.js';
 import { logger } from '../lib/logger.js';
 
 export const uploadRoot = path.resolve(env.UPLOAD_DIR);
+
+// All images are decoded by Sharp rather than trusted from their declared MIME type.
+// Profile photos are standardized to a compact JPEG that is safe to display.
+export async function normalizeImageUpload(file, document = false) {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+    throw new AppError(422, 'INVALID_FILE', 'Use JPEG, PNG or WebP images, or PDF for credentials.');
+  }
+  try {
+    return await sharp(file.buffer, { limitInputPixels: 25000000 })
+      .rotate()
+      .resize({ width: document ? 2000 : 800, height: document ? 2000 : 800, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+  } catch {
+    throw new AppError(422, 'INVALID_IMAGE', 'This image could not be decoded.');
+  }
+}
+
 export async function removeStoredUpload(userId, url) {
   const filename = path.basename(url);
   if (!/^[a-f0-9-]{36}$/.test(userId) || !/^[a-f0-9-]{36}\.(jpg|pdf)$/.test(filename)) return;
@@ -23,10 +41,7 @@ export async function saveUpload(userId, doctorId, file, document = false) {
   if (document && file.mimetype === 'application/pdf' && file.buffer.subarray(0, 5).toString() === '%PDF-') {
     data = file.buffer; extension = 'pdf';
   } else {
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) throw new AppError(422, 'INVALID_FILE', 'Use JPEG, PNG or WebP images, or PDF for credentials.');
-    try {
-      data = await sharp(file.buffer, { limitInputPixels: 25000000 }).rotate().resize({ width: document ? 2000 : 800, height: document ? 2000 : 800, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85 }).toBuffer();
-    } catch { throw new AppError(422, 'INVALID_IMAGE', 'This image could not be decoded.'); }
+    data = await normalizeImageUpload(file, document);
     extension = 'jpg';
   }
   const filename = `${crypto.randomUUID()}.${extension}`;
@@ -40,6 +55,10 @@ export async function saveUpload(userId, doctorId, file, document = false) {
       await lockUser(tx, userId);
       await lockDoctor(tx, doctorId);
       const doctor = await tx.doctorProfile.findUnique({ where: { userId } });
+      if (!doctor) throw new AppError(404, 'DOCTOR_NOT_FOUND', 'Doctor profile not found.');
+      if (document && doctor.verificationStatus === 'VERIFIED') {
+        throw new AppError(403, 'VERIFIED_CREDENTIALS_LOCKED', 'Verified credentials are locked. Contact AntarTalk support to correct a registration document.');
+      }
       oldUrl = document ? doctor.licenseDocumentUrl : doctor.profileImageUrl;
       await tx.doctorProfile.update({ where: { userId }, data: document ? { licenseDocumentUrl: url, verificationStatus: 'PENDING', verificationSubmittedAt: null, verificationReason: null, isAcceptingBookings: false } : { profileImageUrl: url } });
       await recordAudit({ actorId: userId, action: document ? 'LICENSE_DOCUMENT_UPDATED' : 'PROFILE_PHOTO_UPDATED', entityType: 'DoctorProfile', entityId: doctorId }, tx);

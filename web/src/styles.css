@@ -771,6 +771,36 @@ progress::-moz-progress-bar {
   display: block;
   margin-top: 10px;
 }
+.profile-verified-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 13px 16px;
+  margin: -4px 0 22px;
+  border: 1px solid #bde8dc;
+  border-radius: 12px;
+  background: #f2fbf8;
+}
+.profile-verified-summary > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #087d6c;
+}
+.profile-verified-summary strong,
+.profile-verified-summary small {
+  display: block;
+}
+.profile-verified-summary strong {
+  color: var(--navy);
+  font-size: 13px;
+}
+.profile-verified-summary small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
 label {
   display: flex;
   flex-direction: column;
@@ -845,9 +875,38 @@ textarea {
   outline: 0;
 }
 .profile-form h2 {
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+.profile-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
   padding: 10px 0 15px;
-  border-bottom: 1px solid var(--line);
   margin-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+.profile-section-heading p,
+.profile-section-heading span {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.profile-section-heading > span {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+.professional-heading {
+  margin-top: 16px;
+}
+.profile-form :disabled:not(fieldset) {
+  cursor: not-allowed;
+  color: #667085;
+  border-color: #e8ebef;
+  background: #f8f9fa;
+  opacity: 1;
 }
 .form-footer {
   display: flex;
@@ -883,6 +942,12 @@ textarea {
 .profile-actions > .help {
   grid-column: 1 / -1;
   margin: -2px 0 0;
+}
+.profile-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
 }
 .file-label {
   display: inline-flex;

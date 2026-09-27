@@ -1,11 +1,11 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { CheckCircleIcon, PencilSimpleIcon, XIcon } from "@phosphor-icons/react";
 import { api, fileUrl, mutate } from "../api";
 import { useAuth } from "../auth";
 import {
   DoctorAvatar,
   ErrorState,
   PageHeader,
-  ProfileCompletionCard,
   TransitionLoader,
 } from "../components";
 
@@ -14,7 +14,27 @@ export function ProfilePage() {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
-    [busyLabel, setBusyLabel] = useState("");
+    [busyLabel, setBusyLabel] = useState(""),
+    [editing, setEditing] = useState(false),
+    [formVersion, setFormVersion] = useState(0);
+  const verified = p?.verificationStatus === "VERIFIED";
+  const canEdit = !verified || editing;
+
+  useEffect(() => {
+    if (p?.verificationStatus === "VERIFIED") setEditing(false);
+  }, [p?.verificationStatus]);
+
+  function beginEdit() {
+    setError("");
+    setNotice("");
+    setEditing(true);
+  }
+  function cancelEdit() {
+    setError("");
+    setNotice("");
+    setEditing(false);
+    setFormVersion((value) => value + 1);
+  }
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -46,9 +66,9 @@ export function ProfilePage() {
     try {
       await mutate("/api/doctor/profile", "PATCH", input);
       await reload();
-      setNotice(
-        "Profile saved. Changed credentials require professional re-verification.",
-      );
+      setEditing(false);
+      setFormVersion((value) => value + 1);
+      setNotice(verified ? "Personal details saved. Your professional verification remains active." : "Profile saved. Changed credentials require professional re-verification.");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -73,7 +93,7 @@ export function ProfilePage() {
       setNotice(
         document
           ? "Document saved. When your profile is complete, submit it for review below."
-          : "Photo saved.",
+          : "Photo uploaded and optimized for display.",
       );
     } catch (e) {
       setError((e as Error).message);
@@ -109,7 +129,14 @@ export function ProfilePage() {
         title="The professional behind the care."
         description="Clients will see your professional information. Keep it thoughtful and up to date."
       />
-      <ProfileCompletionCard profile={p!} />
+      {verified && <section className="profile-verified-summary" aria-label="Profile verification status">
+        <div>
+          <CheckCircleIcon size={24} weight="fill" aria-hidden="true" />
+          <span><strong>Profile complete and verified</strong><small>Your practice is {p!.isAcceptingBookings ? "accepting sessions" : "currently paused"}.</small></span>
+        </div>
+        {!editing ? <button type="button" className="button secondary small" onClick={beginEdit}><PencilSimpleIcon /> Edit personal details</button>
+          : <button type="button" className="button secondary small" onClick={cancelEdit} disabled={busy}><XIcon /> Cancel editing</button>}
+      </section>}
       {p!.timezone !== "Asia/Kolkata" && <p className="alert">New sessions use India Standard Time. Saving this profile changes your practice to IST and pauses previous weekly hours; you can set fresh hours after verification.</p>}
       {p!.verificationStatus === "REJECTED" && <section className="card verification-note"><h2>Review changes needed</h2><p>{p!.verificationReason || "Update your professional information, then submit it for review again."}</p></section>}
       {p!.verificationStatus === "PENDING" && p!.verificationSubmittedAt && <section className="card verification-note"><h2>Profile under review</h2><p>Your verification request was submitted. You can keep editing your profile, but credential changes require a new submission.</p></section>}
@@ -127,7 +154,7 @@ export function ProfilePage() {
           <label className="file-label">
             Upload photo
             <input
-              disabled={busy}
+              disabled={busy || !canEdit}
               type="file"
               accept="image/jpeg,image/png,image/webp"
               onChange={(e) => {
@@ -136,12 +163,12 @@ export function ProfilePage() {
               }}
             />
           </label>
-          <small>JPEG, PNG or WebP · up to 5 MB</small>
+          <small>JPEG, PNG or WebP · up to 5 MB. Photos are rotated correctly, resized to 800 px maximum and converted to JPEG securely on the server.</small>
         </div>
       </section>
-      <form id="professional-profile-form" className="card profile-form" onSubmit={save} key={p!.id}>
-        <fieldset disabled={busy}>
-          <h2>Professional information</h2>
+      <form id="professional-profile-form" className="card profile-form" onSubmit={save} key={`${p!.id}-${formVersion}`}>
+        <fieldset disabled={busy || !canEdit}>
+          <div className="profile-section-heading"><div><h2>Personal information</h2><p>Keep your client-facing details current.</p></div>{verified && !editing && <span>Choose Edit to make changes</span>}</div>
           <div className="form-grid">
             <label>
               First name
@@ -173,10 +200,22 @@ export function ProfilePage() {
               </select>
             </label>
             <label>
+              Date of birth
+              <input name="dateOfBirth" type="date" defaultValue={p!.dateOfBirth.slice(0, 10)} required />
+            </label>
+            <label>
+              Phone number
+              <input name="phoneNumber" type="tel" defaultValue={p!.phoneNumber} required />
+            </label>
+          </div>
+          <div className="profile-section-heading professional-heading"><div><h2>Professional details</h2><p>{verified ? "Verified credentials are locked. Contact AntarTalk support if a correction is required." : "These details are reviewed before your practice is approved."}</p></div></div>
+          <div className="form-grid">
+            <label>
               Category
               <select
                 name="professionalCategory"
                 defaultValue={p!.professionalCategory}
+                disabled={verified}
               >
                 <option value="PSYCHOLOGIST">Psychologist</option>
                 <option value="PSYCHIATRIST">Psychiatrist</option>
@@ -191,6 +230,7 @@ export function ProfilePage() {
                 min={0}
                 max={80}
                 defaultValue={p!.experienceYears ?? ""}
+                disabled={verified}
               />
             </label>
             <label>
@@ -199,6 +239,7 @@ export function ProfilePage() {
                 name="qualification"
                 maxLength={200}
                 defaultValue={p!.qualification ?? ""}
+                disabled={verified}
               />
             </label>
             <label>
@@ -207,6 +248,7 @@ export function ProfilePage() {
                 name="institution"
                 maxLength={200}
                 defaultValue={p!.institution ?? ""}
+                disabled={verified}
               />
             </label>
             <label>
@@ -217,6 +259,7 @@ export function ProfilePage() {
                 min={1900}
                 max={2200}
                 defaultValue={p!.graduationYear ?? ""}
+                disabled={verified}
               />
             </label>
             {p!.professionalStatus === "LICENSED_PROFESSIONAL" && (
@@ -228,11 +271,12 @@ export function ProfilePage() {
                   maxLength={100}
                   defaultValue={p!.licenseNumber ?? ""}
                   required
+                  disabled={verified}
                 />
               </label>
             )}
           </div>
-          <h2>About your practice</h2>
+          <div className="profile-section-heading"><div><h2>About your practice</h2><p>These are the details clients use to understand your approach.</p></div></div>
           <label>
             Short bio
             <textarea
@@ -297,14 +341,11 @@ export function ProfilePage() {
       </form>
       <section className="card">
         <h2>License document</h2>
-        <p>
-          Private to your account. Uploading new credentials pauses bookings and
-          requires re-verification.
-        </p>
-        <label className="file-label">
+        <p>{verified ? "Private and locked after verification. Contact AntarTalk support if your registration document needs correction." : "Private to your account. Uploading new credentials pauses bookings and requires re-verification."}</p>
+        {!verified && <label className="file-label">
           Upload document
           <input
-            disabled={busy}
+            disabled={busy || !canEdit}
             type="file"
             accept="application/pdf,image/jpeg,image/png,image/webp"
             onChange={(e) => {
@@ -312,7 +353,7 @@ export function ProfilePage() {
               e.target.value = "";
             }}
           />
-        </label>
+        </label>}
         {p!.licenseDocumentUrl && (
           <button className="button secondary" onClick={download}>
             Download saved document
@@ -323,7 +364,7 @@ export function ProfilePage() {
           authorized backend administrators.
         </p>
       </section>
-      <section className="card profile-actions">
+      {!verified && <section className="card profile-actions">
         <div>
           <p className="eyebrow">FINAL STEP</p>
           <h2>Save, then submit for review.</h2>
@@ -336,7 +377,11 @@ export function ProfilePage() {
           )}
         </div>
         {!p!.profileCompleted && <p className="help">Finish the required fields, including a profile photo, session language and consultation fee, then save your profile to unlock submission.</p>}
-      </section>
+      </section>}
+      {verified && editing && <section className="profile-edit-actions">
+        <button className="button secondary" type="button" disabled={busy} onClick={cancelEdit}>Discard changes</button>
+        <button className="button" type="submit" form="professional-profile-form" disabled={busy}>Save profile</button>
+      </section>}
       {busy && <TransitionLoader label={busyLabel || "Updating your profile…"} />}
     </>
   );

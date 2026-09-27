@@ -28,6 +28,10 @@ function validateCredentials(profile) {
   }
 }
 
+export function changedCredentialFields(current, profileInput) {
+  return Object.keys(profileInput).filter((key) => credentialFields.has(key) && String(profileInput[key]) !== String(current[key]));
+}
+
 export async function getProfile(userId) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, email: true, emailVerifiedAt: true, accountStatus: true, doctorProfile: { select: doctorProfileSelect } } });
   if (!user?.doctorProfile) throw new AppError(404, 'DOCTOR_NOT_FOUND', 'Doctor profile not found.');
@@ -41,7 +45,13 @@ export async function updateProfile(userId, input, context = {}) {
   const merged = { ...current, ...profileInput };
   if (profileInput.isAcceptingBookings && !profileCompletion(merged).profileCompleted) throw new AppError(403, 'PROFILE_INCOMPLETE', 'Complete your professional profile before accepting bookings.');
   validateCredentials(merged);
-  const credentialsChanged = Object.keys(profileInput).some((key) => credentialFields.has(key) && String(profileInput[key]) !== String(current[key]));
+  const changedCredentials = changedCredentialFields(current, profileInput);
+  if (current.verificationStatus === 'VERIFIED' && changedCredentials.length) {
+    throw new AppError(403, 'VERIFIED_CREDENTIALS_LOCKED', 'Verified professional credentials are locked. Contact AntarTalk support to correct them.');
+  }
+  // Draft and rejected profiles must be reviewed again when credentials change.
+  // A verified doctor's permitted personal/practice edits do not reopen review.
+  const credentialsChanged = current.verificationStatus !== 'VERIFIED' && changedCredentials.length > 0;
   if (profileInput.isAcceptingBookings && (credentialsChanged || current.verificationStatus !== 'VERIFIED')) {
     throw new AppError(403, 'DOCTOR_NOT_VERIFIED', 'Only verified professionals may accept bookings.');
   }

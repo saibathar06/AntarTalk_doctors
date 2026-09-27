@@ -494,6 +494,48 @@ test("profile edits persist through the API and never submit completion flags", 
   expect(body).not.toHaveProperty("profileCompleted");
   await expect(page.getByRole("status")).toContainText("Profile saved");
 });
+test("a verified doctor explicitly enters edit mode and cannot alter verified credentials", async ({ page }) => {
+  const verifiedProfile = {
+    ...profile,
+    firstName: "Asha",
+    lastName: "Sharma",
+    gender: "FEMALE",
+    dateOfBirth: "1990-01-01T00:00:00.000Z",
+    phoneNumber: "+919876543210",
+    professionalCategory: "PSYCHOLOGIST",
+    professionalStatus: "LICENSED_PROFESSIONAL",
+    licenseNumber: "LIC-12345",
+    qualification: "MSc Psychology",
+    experienceYears: 5,
+    bio: "Client-facing bio.",
+    languages: ["English"],
+    preferredSessionLanguage: "English",
+    expertise: ["Anxiety"],
+    consultationFee: "1200.00",
+    profileImageUrl: "/api/doctor/files/photo.jpg",
+    profileCompleted: true,
+    completionPercentage: 100,
+    missingFields: [],
+    verificationStatus: "VERIFIED",
+    isAcceptingBookings: true,
+    canTakeSessions: true,
+  };
+  await mockWorkspace(page, verifiedProfile);
+  await page.goto("/doctor/profile");
+  await expect(page.getByText("Profile complete and verified")).toBeVisible();
+  await expect(page.getByLabel("First name")).toBeDisabled();
+  await expect(page.getByLabel("License / registration number")).toBeDisabled();
+  await page.getByRole("button", { name: "Edit personal details" }).click();
+  await expect(page.getByLabel("First name")).toBeEnabled();
+  await expect(page.getByLabel("License / registration number")).toBeDisabled();
+  await page.getByLabel("First name").fill("Asha Updated");
+  const request = page.waitForRequest((item) => item.url().endsWith("/api/doctor/profile") && item.method() === "PATCH");
+  await page.getByRole("button", { name: "Save profile" }).click();
+  const body = (await request).postDataJSON();
+  expect(body.firstName).toBe("Asha Updated");
+  expect(body).not.toHaveProperty("licenseNumber");
+  await expect(page.getByRole("status")).toContainText("verification remains active");
+});
 test("join button follows backend permission and cannot fake a video room", async ({
   page,
 }) => {

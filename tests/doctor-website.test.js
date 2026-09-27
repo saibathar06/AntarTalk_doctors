@@ -5,8 +5,10 @@ vi.mock('../src/lib/prisma.js', () => ({ prisma: {
 import { prisma } from '../src/lib/prisma.js';
 import { profileCompletion, canDoctorTakeSessions } from '../src/services/eligibility.service.js';
 import { appointments, clients, joinState } from '../src/services/doctorWorkspace.service.js';
+import { changedCredentialFields } from '../src/services/doctor.service.js';
 import { updateProfileSchema } from '../src/validation/doctor.schemas.js';
-import { readUpload, saveUpload } from '../src/services/upload.service.js';
+import { readUpload, saveUpload, normalizeImageUpload } from '../src/services/upload.service.js';
+import sharp from 'sharp';
 
 const doctor = {
   id: 'doctor', timezone: 'Asia/Kolkata', firstName: 'Test', lastName: 'Professional',
@@ -31,6 +33,10 @@ describe('server-derived profile and eligibility', () => {
   });
   it.each(['profileCompleted', 'completionPercentage', 'canTakeSessions', 'profileImageUrl', 'licenseDocumentUrl'])('rejects client-controlled %s', (field) => expect(updateProfileSchema.safeParse({ body: { [field]: true } }).success).toBe(false));
   it.each([{ experienceYears: -1 }, { experienceYears: 1.5 }, { graduationYear: 1800 }, { consultationFee: -5 }, { languages: [''] }])('validates profile input %j', (body) => expect(updateProfileSchema.safeParse({ body }).success).toBe(false));
+  it('does not treat verified doctors’ personal edits as credential changes', () => {
+    expect(changedCredentialFields(doctor, { firstName: 'Updated', bio: 'Updated bio', phoneNumber: '+919876543210' })).toEqual([]);
+    expect(changedCredentialFields(doctor, { licenseNumber: 'NEW-LICENSE' })).toEqual(['licenseNumber']);
+  });
 });
 describe('doctor-scoped workspace', () => {
   it('uses doctor timezone for calendar bounds and strips client identifiers', async () => {
@@ -68,5 +74,14 @@ describe('private upload boundaries', () => {
   it('rejects missing files and arbitrary HTML', async () => {
     await expect(saveUpload('user', 'doctor', undefined)).rejects.toMatchObject({ code: 'FILE_REQUIRED' });
     await expect(saveUpload('user', 'doctor', { mimetype: 'text/html', buffer: Buffer.from('<html>') })).rejects.toMatchObject({ code: 'INVALID_FILE' });
+  });
+  it('normalizes a valid profile image to a compact, display-safe JPEG', async () => {
+    const source = await sharp({ create: { width: 1600, height: 1200, channels: 3, background: '#f7256f' } }).png().toBuffer();
+    const output = await normalizeImageUpload({ mimetype: 'image/png', buffer: source });
+    const metadata = await sharp(output).metadata();
+    expect(metadata).toMatchObject({ format: 'jpeg', width: 800, height: 600 });
+  });
+  it('rejects an image whose declared MIME type cannot actually be decoded', async () => {
+    await expect(normalizeImageUpload({ mimetype: 'image/jpeg', buffer: Buffer.from('not an image') })).rejects.toMatchObject({ code: 'INVALID_IMAGE' });
   });
 });
