@@ -3,13 +3,26 @@ import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
 import { redis } from './lib/redis.js';
 import { app } from './app.js';
+import { processBookingEmails } from './services/bookingEmail.service.js';
 
 // Redis-backed middleware may begin the lazy connection while modules load; ping
 // waits for that same connection without attempting a second connect().
 await redis.ping();
 const server = app.listen(env.PORT, () => logger.info({ port: env.PORT }, 'AntarTalk API listening'));
+let processingEmails = false;
+async function emailTick() {
+  if (processingEmails) return;
+  processingEmails = true;
+  try { await processBookingEmails(); }
+  catch { logger.error('Booking email queue unavailable'); }
+  finally { processingEmails = false; }
+}
+const emailTimer = globalThis.setInterval(() => { void emailTick(); }, 15000);
+emailTimer.unref();
+void emailTick();
 
 async function shutdown(signal) {
+  globalThis.clearInterval(emailTimer);
   logger.info({ signal }, 'Graceful shutdown started');
   server.close(async () => {
     await Promise.allSettled([prisma.$disconnect(), redis.quit()]);

@@ -43,6 +43,8 @@ export async function confirmBooking(clientId, input, idempotencyKey) {
         data: {
           doctorId: input.doctorId,
           clientId,
+          clientName: input.clientName,
+          clientAge: input.clientAge,
           startTime: slot.startTime,
           endTime: slot.endTime,
           sessionDurationMinutes: scheduling.sessionDurationMinutes,
@@ -58,6 +60,8 @@ export async function confirmBooking(clientId, input, idempotencyKey) {
         responseCode: 201, responseBody: JSON.parse(JSON.stringify(created)), resourceId: created.id,
         expiresAt: new Date(Date.now() + 7 * 86_400_000)
       } });
+      // Durable work is queued in the same transaction as the booking.
+      await tx.bookingEmail.createMany({ data: ['CLIENT', 'DOCTOR'].map((audience) => ({ bookingId: created.id, audience })) });
       await readOwnedReservation(clientId, input);
       return created;
     });

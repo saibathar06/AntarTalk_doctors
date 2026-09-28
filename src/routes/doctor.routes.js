@@ -8,7 +8,7 @@ import * as sessions from '../services/session.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import {
   blockedIdSchema, changePasswordSchema, createBlockedSlotSchema, payoutAccountSchema, payoutListSchema,
-  replaceHoursSchema, sessionListSchema, updateProfileSchema, withdrawSchema
+  presetsSchema, replaceHoursSchema, sessionListSchema, updateProfileSchema, withdrawSchema
 } from '../validation/doctor.schemas.js';
 import { z } from 'zod';
 import { uuid } from '../validation/common.js';
@@ -30,6 +30,7 @@ doctorRouter.post('/profile/documents', upload.single('file'), asyncHandler(asyn
 doctorRouter.get('/files/:filename', validate(z.object({ params: z.object({ filename: z.string().regex(/^[a-f0-9-]{36}\.(jpg|pdf)$/) }) })), asyncHandler(async (req, res) => {
   const file = await readUpload(req.user.id, req.params.filename);
   res.set('Content-Security-Policy', "default-src 'none'; sandbox");
+  if (Buffer.isBuffer(file)) return res.type('image/jpeg').send(file);
   res.sendFile(file, { dotfiles: 'deny', headers: { 'Content-Disposition': req.params.filename.endsWith('.pdf') ? 'attachment' : 'inline' } }, (error) => { if (error && !res.headersSent) res.status(404).json({ success: false, error: { code: 'FILE_NOT_FOUND', message: 'File not found.' } }); });
 }));
 doctorRouter.get('/dashboard', asyncHandler(async (req, res) => res.json({ success: true, data: await workspace.dashboard(req.user.doctorProfile.id) })));
@@ -45,6 +46,9 @@ doctorRouter.post('/change-password', validate(changePasswordSchema), asyncHandl
 }));
 
 doctorRouter.get('/availability', requireVerifiedDoctor, asyncHandler(async (req, res) => res.json({ success: true, data: await availability.getWorkingHours(req.user.doctorProfile.id) })));
+
+doctorRouter.get('/availability/presets', requireVerifiedDoctor, asyncHandler(async (req, res) => res.json({ success: true, data: await availability.getPresets(req.user.doctorProfile.id) })));
+doctorRouter.put('/availability/presets', requireVerifiedDoctor, validate(presetsSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await availability.savePresets(req.user.id, req.user.doctorProfile.id, req.body.presets) })));
 doctorRouter.put('/availability', requireVerifiedDoctor, validate(replaceHoursSchema), asyncHandler(async (req, res) => {
   const data = await availability.replaceWorkingHours(req.user.id, req.user.doctorProfile.id, req.body, { ip: req.ip });
   res.json({ success: true, data });

@@ -138,7 +138,9 @@ export async function verifyRazorpayPayment(clientId, input, idempotencyKey) {
     reservationId: input.reservationId,
     doctorId: input.doctorId,
     startTime: input.startTime,
-    paymentId: payment.id
+    paymentId: payment.id,
+    clientName: input.clientName,
+    clientAge: input.clientAge
   }, idempotencyKey);
 }
 

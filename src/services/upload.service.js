@@ -47,8 +47,10 @@ export async function saveUpload(userId, doctorId, file, document = false) {
   }
   const filename = `${crypto.randomUUID()}.${extension}`;
   const directory = path.join(uploadRoot, userId);
-  await mkdir(directory, { recursive: true });
-  await writeFile(path.join(directory, filename), data, { flag: 'wx', mode: 0o600 });
+  if (document) {
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, filename), data, { flag: 'wx', mode: 0o600 });
+  }
   const url = `/api/doctor/files/${filename}`;
   let oldUrl;
   try {
@@ -61,17 +63,22 @@ export async function saveUpload(userId, doctorId, file, document = false) {
         throw new AppError(403, 'VERIFIED_CREDENTIALS_LOCKED', 'Verified credentials are locked. Contact AntarTalk support to correct a registration document.');
       }
       oldUrl = document ? doctor.licenseDocumentUrl : doctor.profileImageUrl;
+      if (!document) await tx.doctorPhoto.upsert({ where: { doctorId }, create: { doctorId, data }, update: { data } });
       await tx.doctorProfile.update({ where: { userId }, data: document ? { licenseDocumentUrl: url, verificationStatus: 'PENDING', verificationSubmittedAt: null, verificationReason: null, isAcceptingBookings: false } : { profileImageUrl: url } });
       await recordAudit({ actorId: userId, action: document ? 'LICENSE_DOCUMENT_UPDATED' : 'PROFILE_PHOTO_UPDATED', entityType: 'DoctorProfile', entityId: doctorId }, tx);
     });
-  } catch (error) { await unlink(path.join(directory, filename)).catch(() => {}); throw error; }
+  } catch (error) { if (document) await unlink(path.join(directory, filename)).catch(() => {}); throw error; }
   if (oldUrl) await removeStoredUpload(userId, oldUrl);
   return { url };
 }
 export async function readUpload(userId, filename) {
-  const doctor = await prisma.doctorProfile.findUnique({ where: { userId }, select: { profileImageUrl: true, licenseDocumentUrl: true } });
+  const doctor = await prisma.doctorProfile.findUnique({ where: { userId }, select: { id: true, profileImageUrl: true, licenseDocumentUrl: true } });
   const url = `/api/doctor/files/${filename}`;
   if (!doctor || ![doctor.profileImageUrl, doctor.licenseDocumentUrl].includes(url)) throw new AppError(404, 'FILE_NOT_FOUND', 'File not found.');
+  if (url === doctor.profileImageUrl) {
+    const photo = await prisma.doctorPhoto.findUnique({ where: { doctorId: doctor.id } });
+    if (photo) return Buffer.from(photo.data);
+  }
   const file = path.join(uploadRoot, userId, filename);
   try {
     await access(file, fsConstants.R_OK);

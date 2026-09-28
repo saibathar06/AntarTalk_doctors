@@ -16,6 +16,7 @@ beforeEach(() => {
     booking: { count: vi.fn(async () => 0) },
     refreshToken: { updateMany: vi.fn() },
     doctorWorkingHour: { updateMany: vi.fn() },
+    doctorPhoto: { deleteMany: vi.fn() },
     doctorBlockedSlot: { updateMany: vi.fn() },
     otpChallenge: { deleteMany: vi.fn() },
     auditLog: { create: vi.fn() }

@@ -49,6 +49,8 @@ export async function getBookableDoctor(doctorId, db = prisma) {
 
 export async function readBookableDoctorPhoto(doctorId, db = prisma) {
   const doctor = await findBookableDoctor(doctorId, db);
+  const photo = await db.doctorPhoto.findUnique({ where: { doctorId } });
+  if (photo) return Buffer.from(photo.data);
   const filename = doctor.profileImageUrl ? path.basename(doctor.profileImageUrl) : '';
   if (!/^[a-f0-9-]{36}\.jpg$/.test(filename)) {
     throw new AppError(404, 'PROFILE_PHOTO_NOT_FOUND', 'Profile photo not found.');

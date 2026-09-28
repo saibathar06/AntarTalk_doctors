@@ -119,6 +119,7 @@ export async function deleteAccount(userId, context = {}) {
     if (active) throw new AppError(409, 'ACTIVE_BOOKINGS_EXIST', 'Resolve active or future bookings before deleting the account.');
     await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } });
     await tx.doctorWorkingHour.updateMany({ where: { doctorId: profile.id }, data: { isActive: false } });
+    await tx.doctorPhoto.deleteMany({ where: { doctorId: profile.id } });
     await tx.doctorProfile.update({
       where: { id: profile.id },
       data: {
@@ -128,7 +129,7 @@ export async function deleteAccount(userId, context = {}) {
         specialization: null, enrollmentNumber: null, bio: null, isAcceptingBookings: false,
         profileImageUrl: null, licenseDocumentUrl: null, qualification: null, institution: null,
         graduationYear: null, experienceYears: null, languages: [], preferredSessionLanguage: null, expertise: [], consultationFee: null,
-        verificationStatus: 'SUSPENDED'
+        verificationStatus: 'SUSPENDED', availabilityPresets: []
       }
     });
     await tx.user.update({

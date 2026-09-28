@@ -24,6 +24,21 @@ export function AvailabilityPage() {
   const { profile, reload } = useAuth();
   const hours = useResource<WorkingHour[]>("/api/doctor/availability");
   const blocks = useResource<Block[]>("/api/doctor/blocked-slots");
+  const presets = useResource<typeof quickWindows>("/api/doctor/availability/presets");
+  async function savePresets(next: typeof quickWindows) {
+    setBusy(true); setError("");
+    try {
+      await mutate("/api/doctor/availability/presets", "PUT", { presets: next });
+      presets.reload();
+      setNotice("Favorite times saved. Select a favorite on any date below to apply it.");
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  }
+  function addPreset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const values = Object.fromEntries(new FormData(event.currentTarget));
+    void savePresets([...(presets.data ?? []), { label: String(values.label), startTime: String(values.startTime), endTime: String(values.endTime) }]);
+  }
   const [windows, setWindows] = useState<WorkingHour[]>([]),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -32,8 +47,9 @@ export function AvailabilityPage() {
   useEffect(() => {
     if (hours.data)
       setWindows(
-        (profile!.timezone === "Asia/Kolkata" ? hours.data : []).map(({ dayOfWeek, startTime, endTime, isActive }) => ({
+        (profile!.timezone === "Asia/Kolkata" ? hours.data : []).filter((row) => !row.availableDate || row.availableDate >= DateTime.now().setZone("Asia/Kolkata").toISODate()!).map(({ dayOfWeek, availableDate, startTime, endTime, isActive }) => ({
           dayOfWeek,
+          availableDate,
           startTime,
           endTime,
           isActive,
@@ -43,7 +59,7 @@ export function AvailabilityPage() {
   async function save(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
-    setBusyLabel("Saving your weekly availability…");
+    setBusyLabel("Saving your dated availability…");
     setError("");
     setNotice("");
     try {
@@ -128,7 +144,8 @@ export function AvailabilityPage() {
         )
       )
         return current;
-      return [...current, { dayOfWeek, startTime, endTime, isActive: true }];
+      const date = today.plus({ days: (dayOfWeek - today.weekday + 7) % 7 }).toISODate()!;
+      return [...current, { dayOfWeek, availableDate: date, startTime, endTime, isActive: true }];
     });
   }
   const today = DateTime.now().setZone("Asia/Kolkata").startOf("day");
@@ -148,19 +165,38 @@ export function AvailabilityPage() {
         description={`Today is ${today.toFormat("cccc, d LLLL yyyy")} in India Standard Time. Choose the times clients can book, then protect specific time away when needed.`}
       />
       <ErrorState message={error || hours.error || blocks.error} />
-      {profile!.timezone !== "Asia/Kolkata" && <p className="alert">Your previous schedule used another timezone. Set fresh weekly hours in IST and save them before clients can book new sessions. Existing appointments keep their original UTC times.</p>}
+      {profile!.timezone !== "Asia/Kolkata" && <p className="alert">Your previous schedule used another timezone. Set fresh dated hours in IST and save them before clients can book new sessions. Existing appointments keep their original UTC times.</p>}
       {notice && (
         <p className="alert" role="status">
           {notice}
         </p>
       )}
+      <section className="card">
+        <h2>Your favorite time ranges</h2>
+        <p>Save a range once, then apply it to any of the next seven dates. Saving a favorite does not open bookings.</p>
+        <ErrorState message={presets.error} />
+        <form onSubmit={addPreset}>
+          <fieldset disabled={busy || presets.loading || Boolean(presets.error)}>
+            <div className="form-grid">
+              <label>Favorite name<input name="label" required maxLength={50} placeholder="My daytime hours" /></label>
+              <label>Favorite start<input name="startTime" type="time" required /></label>
+              <label>Favorite end<input name="endTime" type="time" required /></label>
+            </div>
+            <button className="button secondary" disabled={(presets.data?.length ?? 0) >= 20}>Save favorite</button>
+          </fieldset>
+        </form>
+        {presets.data?.map((preset, index) => <div className="blocked-item" key={index}>
+          <span>{preset.label} · {preset.startTime}–{preset.endTime}</span>
+          <button className="button secondary small" disabled={busy} onClick={() => void savePresets(presets.data!.filter((_, i) => i !== index))}>Remove favorite</button>
+        </div>)}
+      </section>
       <form className="card" onSubmit={save}>
         <fieldset disabled={busy || hours.loading || Boolean(hours.error)}>
           <div className="section-title">
               <div>
                 <h2>Your next seven days</h2>
                 <p>
-                  Set the hours for each dated day below. They repeat every week on that weekday until you change them.
+                  Open only the dates below. These hours expire after that date and do not repeat next week.
               </p>
             </div>
             <span className="help">All availability uses India Standard Time (IST).</span>
@@ -173,7 +209,7 @@ export function AvailabilityPage() {
                 <div className="day-heading">
                   <strong>{day.isToday ? "Today" : day.dayName}</strong>
                   <span>{day.dateLabel}</span>
-                  <small>Repeats every {day.dayName}</small>
+                  <small>This date only</small>
                 </div>
                 <div className="day-windows">
                   {windows.map(
@@ -227,11 +263,11 @@ export function AvailabilityPage() {
                     <span className="muted">No time is available yet. Choose a quick period or add your own.</span>
                   )}
                   <div className="quick-windows" aria-label={`${day.dayName} quick times`}>
-                    {quickWindows.map((window) => (
+                    {[...(presets.data ?? []), ...quickWindows].map((window, presetIndex) => (
                       <button
                         className="quick-window"
                         type="button"
-                        key={window.label}
+                        key={presetIndex}
                         onClick={() => addWindow(day.dayOfWeek, window.startTime, window.endTime)}
                       >
                         {window.label} <small>{window.startTime}–{window.endTime}</small>
@@ -263,7 +299,7 @@ export function AvailabilityPage() {
       <section className="card">
         <h2>Time away</h2>
         <p>
-           Use this for leave, meetings, or personal time in India Standard Time. It removes only the selected period from availability; your weekly hours remain unchanged. Existing bookings must be resolved before blocking an overlap.
+           Use this for leave, meetings, or personal time in India Standard Time. It removes only the selected period from availability. Existing bookings must be resolved before blocking an overlap.
         </p>
         <form onSubmit={block}>
           <fieldset disabled={busy}>

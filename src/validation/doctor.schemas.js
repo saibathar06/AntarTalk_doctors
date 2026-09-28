@@ -35,6 +35,7 @@ export const updateProfileSchema = z.object({ body: z.object({
   .refine((body) => !body.email || Boolean(body.currentPassword), { message: 'Current password is required to change email', path: ['currentPassword'] }) });
 
 const workingWindow = z.object({
+  availableDate: z.string().date().optional(),
   dayOfWeek: z.number().int().min(1).max(7),
   startTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
   endTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
@@ -45,6 +46,14 @@ export const replaceHoursSchema = z.object({ body: z.object({
   timezone: z.literal('Asia/Kolkata'),
   windows: z.array(workingWindow).max(50)
 }) });
+
+export const presetsSchema = z.object({ body: z.object({
+  presets: z.array(z.object({
+    label: z.string().trim().min(1).max(50),
+    startTime: workingWindow.shape.startTime,
+    endTime: workingWindow.shape.endTime
+  }).refine((v) => v.startTime !== v.endTime, 'Start and end times must differ')).max(20)
+}).strict() });
 
 export const createBlockedSlotSchema = z.object({ body: z.object({
   startTime: isoDateTime,

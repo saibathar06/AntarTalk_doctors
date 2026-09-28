@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 vi.mock('../src/lib/prisma.js', () => ({ prisma: {
   doctorProfile: { findUnique: vi.fn() }, booking: { findMany: vi.fn(), count: vi.fn(), groupBy: vi.fn() }, $queryRaw: vi.fn()
+  , doctorPhoto: { findUnique: vi.fn() }
 } }));
 import { prisma } from '../src/lib/prisma.js';
 import { profileCompletion, canDoctorTakeSessions } from '../src/services/eligibility.service.js';
@@ -67,6 +68,13 @@ describe('doctor-scoped workspace', () => {
   });
 });
 describe('private upload boundaries', () => {
+  it('reads the owned persistent photo even when no local disk file exists', async () => {
+    const filename = '22222222-2222-4222-8222-222222222222.jpg';
+    prisma.doctorProfile.findUnique.mockResolvedValue({ id: 'doctor', profileImageUrl: '/api/doctor/files/' + filename });
+    prisma.doctorPhoto.findUnique.mockResolvedValue({ data: Buffer.from('persistent-photo') });
+    await expect(readUpload('user', filename)).resolves.toEqual(Buffer.from('persistent-photo'));
+    expect(prisma.doctorPhoto.findUnique).toHaveBeenCalledWith({ where: { doctorId: 'doctor' } });
+  });
   it('cannot fetch an unowned file', async () => {
     await expect(readUpload('user', 'another-file.pdf')).rejects.toMatchObject({ code: 'FILE_NOT_FOUND' });
     expect(prisma.doctorProfile.findUnique.mock.calls[0][0].where).toEqual({ userId: 'user' });

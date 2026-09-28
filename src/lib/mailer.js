@@ -20,6 +20,15 @@ function maskEmail(email) {
   return `${local.slice(0, 2)}${'*'.repeat(Math.max(1, Math.min(6, local.length - 2)))}@${domain}`;
 }
 
+export async function sendBookingEmail({ email, text, messageId }) {
+  const result = await transport.sendMail({
+    from: env.EMAIL_FROM, to: email, subject: 'Your AntarTalk session is confirmed',
+    text, messageId, disableFileAccess: true, disableUrlAccess: true
+  });
+  if (!result.accepted?.length) throw new Error('Booking email recipient not accepted');
+  logger.info({ recipient: maskEmail(email), messageId: result.messageId }, 'Booking confirmation accepted by SMTP');
+}
+
 function otpTemplate(code, label) {
   return `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#173f7a">
     <h2 style="color:#d36157">AntarTalk verification</h2>

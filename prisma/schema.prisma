@@ -143,6 +143,8 @@ model DoctorProfile {
   updatedAt                DateTime             @updatedAt @db.Timestamptz(3)
   user                     User                 @relation(fields: [userId], references: [id])
   workingHours             DoctorWorkingHour[]
+  availabilityPresets      Json                 @default("[]")
+  photo                    DoctorPhoto?
   blockedSlots             DoctorBlockedSlot[]
   bookings                 Booking[]
   earnings                 Earning[]
@@ -186,6 +188,7 @@ model DoctorWorkingHour {
   id          String        @id @default(uuid()) @db.Uuid
   doctorId    String        @db.Uuid
   dayOfWeek   Int
+  availableDate DateTime?    @db.Date
   startTime   DateTime      @db.Time(0)
   endTime     DateTime      @db.Time(0)
   timezone    String        @db.VarChar(64)
@@ -214,6 +217,8 @@ model Booking {
   id                    String        @id @default(uuid()) @db.Uuid
   doctorId              String        @db.Uuid
   clientId              String        @db.Uuid
+  clientName            String?       @db.VarChar(200)
+  clientAge             Int?
   startTime             DateTime      @db.Timestamptz(3)
   endTime               DateTime      @db.Timestamptz(3)
   sessionDurationMinutes Int
@@ -229,9 +234,28 @@ model Booking {
   client                User          @relation("ClientBookings", fields: [clientId], references: [id])
   payment               Payment?      @relation(fields: [paymentId], references: [id])
   earning               Earning?
+  confirmationEmails    BookingEmail[]
 
   @@index([doctorId, startTime])
   @@index([clientId, startTime])
+}
+
+model DoctorPhoto {
+  doctorId String @id @db.Uuid
+  data Bytes
+  doctor DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+}
+
+model BookingEmail {
+  id String @id @default(uuid()) @db.Uuid
+  bookingId String @db.Uuid
+  audience String @db.VarChar(10)
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now()) @db.Timestamptz(3)
+  sentAt DateTime? @db.Timestamptz(3)
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  @@unique([bookingId, audience])
+  @@index([sentAt, nextAttemptAt])
 }
 
 model Payment {

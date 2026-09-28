@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { DateTime } from "luxon";
 
 // Isolated contract fixtures only: never imported by production code or seeded into a database.
 const profile = {
@@ -54,7 +55,7 @@ async function mockWorkspace(page: Page, doctorProfile = profile) {
                 averageRating: null,
                 schedule: empty,
               }
-            : path.endsWith("/availability") || path.endsWith("/blocked-slots")
+            : path.endsWith("/availability") || path.endsWith("/blocked-slots") || path.endsWith("/availability/presets")
               ? []
               : empty;
     await route.fulfill({ json: { success: true, data } });
@@ -200,6 +201,7 @@ test("client booking uses the live slot, reservation, and confirmation contracts
   });
   await page.goto(`/book-session/${doctorId}`);
   await expect(page.getByRole("heading", { name: "Dr. Asha Sharma" })).toBeVisible();
+  await expect(page.getByLabel("Available dates").getByRole("button")).toHaveCount(7);
   await page.getByLabel("Client email").fill("client@example.test");
   await page.getByLabel("Password").fill("TestPassword123!");
   await page.getByRole("button", { name: "Sign in to book" }).click();
@@ -207,6 +209,9 @@ test("client booking uses the live slot, reservation, and confirmation contracts
   await page.getByRole("button", { name: "Book session" }).click();
   await expect(page.getByText("Secure Razorpay checkout")).toBeVisible();
   expect(reservationRequest).toEqual({ doctorId, startTime: start });
+  await expect(page.getByRole("button", { name: "Pay securely with Razorpay" })).toBeDisabled();
+  await page.getByLabel("Your name", { exact: true }).fill("Test Client");
+  await page.getByLabel("Your age", { exact: true }).fill("28");
   await page.getByRole("button", { name: "Pay securely with Razorpay" }).click();
   await expect(page.getByRole("heading", { name: "Session booked successfully" })).toBeVisible();
   expect(confirmationRequest).toEqual({
@@ -217,6 +222,8 @@ test("client booking uses the live slot, reservation, and confirmation contracts
     razorpayOrderId: "order_test",
     razorpayPaymentId: "pay_test",
     razorpaySignature: "a".repeat(64),
+    clientName: "Test Client",
+    clientAge: 28,
   });
 });
 test("real empty states, profile completion, navigation and responsive layout", async ({
@@ -271,10 +278,33 @@ test("availability saves multiple and overnight periods through API", async ({
   expect((await request).postDataJSON()).toEqual({
     timezone: "Asia/Kolkata",
     windows: [
-      { dayOfWeek: 1, startTime: "23:00", endTime: "03:00", isActive: true },
+      { dayOfWeek: 1, availableDate: DateTime.now().setZone("Asia/Kolkata").plus({ days: (8 - DateTime.now().setZone("Asia/Kolkata").weekday) % 7 }).toISODate(), startTime: "23:00", endTime: "03:00", isActive: true },
     ],
   });
   await expect(page.getByText("Working hours saved.")).toBeVisible();
+});
+
+test("favorite time ranges persist and apply to a dated day", async ({ page }) => {
+  await mockWorkspace(page, { ...profile, verificationStatus: "VERIFIED", isAcceptingBookings: true });
+  let presets: { label: string; startTime: string; endTime: string }[] = [];
+  await page.route("**/api/doctor/availability/presets", async (route) => {
+    if (route.request().method() === "PUT") presets = route.request().postDataJSON().presets;
+    return route.fulfill({ json: { success: true, data: presets } });
+  });
+  await page.goto("/doctor/availability");
+  await page.getByLabel("Favorite name").fill("Daytime");
+  await page.getByLabel("Favorite start").fill("09:00");
+  await page.getByLabel("Favorite end").fill("15:00");
+  await page.getByRole("button", { name: "Save favorite", exact: true }).click();
+  await expect(page.getByRole("button", { name: /Daytime 09:00/ })).toHaveCount(7);
+  await page.reload();
+  await page.getByRole("button", { name: /Daytime 09:00/ }).first().click();
+  const request = page.waitForRequest((r) => r.url().endsWith("/api/doctor/availability") && r.method() === "PUT");
+  await page.getByRole("button", { name: "Save working hours" }).click();
+  expect((await request).postDataJSON().windows).toEqual([expect.objectContaining({
+    availableDate: DateTime.now().setZone("Asia/Kolkata").toISODate(),
+    startTime: "09:00", endTime: "15:00"
+  })]);
 });
 test("sign-in requests an email code and keeps tokens out of browser storage", async ({
   page,

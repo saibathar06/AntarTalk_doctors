@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/lib/prisma.js', () => ({ prisma: {} }));
 vi.mock('../src/lib/redis.js', () => ({ redis: { mget: vi.fn(), eval: vi.fn() } }));
@@ -25,9 +25,19 @@ beforeAll(async () => {
   ({ redis } = await import('../src/lib/redis.js'));
 });
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2030-01-07T00:00:00Z'));
+});
+afterEach(() => vi.useRealTimers());
 
 describe('availability filters on the shared backend', () => {
+  it('excludes the eighth day even if a client directly requests it', async () => {
+    const db = { doctorProfile: { findUnique: vi.fn(async () => profile) }, doctorBlockedSlot: { findMany: vi.fn() }, booking: { findMany: vi.fn() } };
+    expect(await getAvailableSlots({ doctorId: profile.id, from: new Date('2030-01-14'), to: new Date('2030-01-15') }, db)).toEqual([]);
+    expect(db.booking.findMany).not.toHaveBeenCalled();
+  });
   it('returns only unblocked, unbooked and unreserved dynamically generated windows', async () => {
     const from = new Date('2030-01-07T00:00:00Z'); // Monday
     const to = new Date('2030-01-08T00:00:00Z');

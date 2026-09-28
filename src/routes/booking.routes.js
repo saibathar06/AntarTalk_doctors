@@ -23,6 +23,7 @@ bookingRouter.get('/doctors/:doctorId', validate(doctorIdSchema), asyncHandler(a
 bookingRouter.get('/doctors/:doctorId/photo', validate(doctorIdSchema), asyncHandler(async (req, res) => {
   const file = await readBookableDoctorPhoto(req.params.doctorId);
   res.set('Cache-Control', 'private, max-age=300');
+  if (Buffer.isBuffer(file)) return res.type('image/jpeg').send(file);
   res.sendFile(file, { dotfiles: 'deny' }, (error) => {
     if (error && !res.headersSent) {
       res.status(404).json({ success: false, error: { code: 'PROFILE_PHOTO_NOT_FOUND', message: 'Profile photo not found.' } });

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { bookingWindow } from '../utils/bookingWindow.js';
 import { scheduling } from '../config/constants.js';
 import { AppError } from '../errors/AppError.js';
 import { prisma } from '../lib/prisma.js';
@@ -15,7 +16,7 @@ export function generateCandidateWindows(profile, from, to) {
 
   for (const date of localDateRange(from, to, profile.timezone)) {
     for (const hours of profile.workingHours.filter(
-      (item) => item.dayOfWeek === date.weekday
+      (item) => item.dayOfWeek === date.weekday && (!item.availableDate || item.availableDate.toISOString().slice(0, 10) === date.toISODate())
     )) {
       const startParts = timeParts(hours.startTime);
       const endParts = timeParts(hours.endTime);
@@ -127,8 +128,10 @@ export async function getAvailableSlots(
     );
   }
 
+  const now = new Date();
+  const horizon = bookingWindow(now).end;
   const candidates = generateCandidateWindows(profile, from, to).filter(
-    (slot) => slot.startTime > new Date()
+    (slot) => slot.startTime > now && slot.endTime <= horizon
   );
 
   if (!candidates.length) return [];

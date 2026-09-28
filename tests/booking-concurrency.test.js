@@ -10,15 +10,16 @@ import { confirmBooking } from '../src/services/booking.service.js';
 import { withdraw } from '../src/services/payout.service.js';
 import { encryptProviderToken } from '../src/utils/encryption.js';
 
-let records, bookings, payouts, tail;
+let records, bookings, payouts, tail, emails;
 const start = new Date('2030-01-01T14:00:00Z');
 const end = new Date('2030-01-01T15:00:00Z');
 const input = { reservationId: 'reservation', doctorId: 'doctor', startTime: start, paymentId: 'payment' };
 beforeEach(() => {
   vi.clearAllMocks();
-  records = new Map(); bookings = []; payouts = []; tail = Promise.resolve();
+  records = new Map(); bookings = []; payouts = []; emails = []; tail = Promise.resolve();
   const recordKey = (where) => JSON.stringify(where.userId_scope_key);
   Object.assign(prisma, {
+    bookingEmail: { createMany: vi.fn(async ({ data }) => { emails.push(...data); return { count: data.length }; }) },
     $queryRaw: vi.fn(),
     user: { findUnique: vi.fn(async () => ({ id: 'client', role: 'CLIENT', accountStatus: 'ACTIVE', emailVerifiedAt: new Date() })) },
     doctorProfile: { findUnique: vi.fn(async () => ({ userId: 'doctor-user', verificationStatus: 'VERIFIED' })) },
@@ -44,8 +45,8 @@ beforeEach(() => {
   // Service concurrency model; real PostgreSQL lock/exclusion tests are a separate integration gate.
   prisma.$transaction = (work) => {
     const run = tail.then(async () => {
-      const savedBookings = [...bookings], savedPayouts = [...payouts], savedRecords = new Map(records);
-      try { return await work(prisma); } catch (error) { bookings = savedBookings; payouts = savedPayouts; records = savedRecords; throw error; }
+      const savedBookings = [...bookings], savedPayouts = [...payouts], savedRecords = new Map(records), savedEmails = [...emails];
+      try { return await work(prisma); } catch (error) { bookings = savedBookings; payouts = savedPayouts; records = savedRecords; emails = savedEmails; throw error; }
     });
     tail = run.catch(() => {});
     return run;
@@ -58,6 +59,7 @@ describe('booking retry regressions', () => {
   it('simultaneous identical requests create one booking and replay one result', async () => {
     const results = await Promise.all(Array.from({ length: 10 }, () => confirmBooking('client', input, 'same-key')));
     expect(bookings).toHaveLength(1);
+    expect(emails).toEqual([{ bookingId: 'booking', audience: 'CLIENT' }, { bookingId: 'booking', audience: 'DOCTOR' }]);
     expect(results.every((r) => r.id === 'booking')).toBe(true);
   });
   it('rejects changed reservation ID under the same key', async () => {
@@ -70,6 +72,7 @@ describe('booking retry regressions', () => {
     await expect(confirmBooking('client', input, 'key')).rejects.toMatchObject({ code: 'RESERVATION_EXPIRED' });
     expect(bookings).toHaveLength(0);
     expect(records.size).toBe(0);
+    expect(emails).toHaveLength(0);
   });
   it('does not turn committed success into failure if Redis cleanup fails', async () => {
     deleteReservationIfOwned.mockRejectedValue(new Error('Redis unavailable'));

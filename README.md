@@ -40,6 +40,12 @@ Port `2525` with `SMTP_SECURE=false` is also supported by Brevo. `EMAIL_FROM` mu
 
 ### Razorpay
 
+Booking updates: doctors save reusable favorite ranges under Availability, then apply them to specific dates. Only today plus six days in IST can be published/booked; ranges do not repeat weekly. Existing schedules migrate to their next occurrence. Appointment windows remain 60 minutes (up to 40 minutes of therapy).
+
+After deploying, run `npm run db:generate` during build and `npm run db:migrate` before starting the API. The new migration adds dated hours, favorites, durable profile photos, booking attendee details and a confirmation-email outbox. Existing lost disk photos must be uploaded again; new photos are compressed to JPEG (maximum 800×800) and stored in PostgreSQL. Credential documents still require persistent `UPLOAD_DIR` storage.
+
+Confirmed bookings queue separate client and doctor emails transactionally. The API processes the queue every 15 seconds using existing SMTP settings, retrying failures up to 10 times. Client emails show doctor, session time and paid amount; doctor emails show only session time and the client-supplied name/age. Older API clients may omit these new optional fields (shown as “Not provided”). Monitor exhausted email jobs in logs/`BookingEmail`; no automatic emails are backfilled for existing bookings. SMTP delivery is at-least-once, not guaranteed exactly-once.
+
 Set these **backend-only** values in Render/local API configuration before using the payment screens. Do not add them to `web/.env.local` or commit them.
 
 ```env
