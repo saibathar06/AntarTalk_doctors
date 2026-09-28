@@ -40,7 +40,7 @@ Port `2525` with `SMTP_SECURE=false` is also supported by Brevo. `EMAIL_FROM` mu
 
 ### Razorpay
 
-Booking updates: doctors save reusable favorite ranges under Availability, then apply them to specific dates. Only today plus six days in IST can be published/booked; ranges do not repeat weekly. Existing schedules migrate to their next occurrence. Appointment windows remain 60 minutes (up to 40 minutes of therapy).
+Booking updates: doctors set one unnamed default start/end time under Availability. It automatically applies every day within the rolling seven-day IST booking horizon. Custom dated hours (including inactive days) override the default and do not repeat. Changing the default preserves custom days; use “Use default timing” to remove a daily override. Old named favorites are not automatically activated: save a default explicitly. Default timing reuses the existing presets JSON storage; no additional migration is needed. Appointment windows remain 60 minutes (up to 40 minutes of therapy).
 
 After deploying, run `npm run db:generate` during build and `npm run db:migrate` before starting the API. The new migration adds dated hours, favorites, durable profile photos, booking attendee details and a confirmation-email outbox. Existing lost disk photos must be uploaded again; new photos are compressed to JPEG (maximum 800×800) and stored in PostgreSQL. Credential documents still require persistent `UPLOAD_DIR` storage.
 

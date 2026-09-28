@@ -8,7 +8,7 @@ import * as sessions from '../services/session.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import {
   blockedIdSchema, changePasswordSchema, createBlockedSlotSchema, payoutAccountSchema, payoutListSchema,
-  presetsSchema, replaceHoursSchema, sessionListSchema, updateProfileSchema, withdrawSchema
+  defaultTimingSchema, presetsSchema, replaceHoursSchema, sessionListSchema, updateProfileSchema, withdrawSchema
 } from '../validation/doctor.schemas.js';
 import { z } from 'zod';
 import { uuid } from '../validation/common.js';
@@ -46,6 +46,8 @@ doctorRouter.post('/change-password', validate(changePasswordSchema), asyncHandl
 }));
 
 doctorRouter.get('/availability', requireVerifiedDoctor, asyncHandler(async (req, res) => res.json({ success: true, data: await availability.getWorkingHours(req.user.doctorProfile.id) })));
+doctorRouter.get('/availability/default-timing', requireVerifiedDoctor, asyncHandler(async (req, res) => res.json({ success: true, data: await availability.readDefaultTiming(req.user.doctorProfile.id) })));
+doctorRouter.put('/availability/default-timing', requireVerifiedDoctor, validate(defaultTimingSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await availability.saveDefaultTiming(req.user.id, req.user.doctorProfile.id, req.body.timing) })));
 
 doctorRouter.get('/availability/presets', requireVerifiedDoctor, asyncHandler(async (req, res) => res.json({ success: true, data: await availability.getPresets(req.user.doctorProfile.id) })));
 doctorRouter.put('/availability/presets', requireVerifiedDoctor, validate(presetsSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await availability.savePresets(req.user.id, req.user.doctorProfile.id, req.body.presets) })));

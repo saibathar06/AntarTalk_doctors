@@ -9,7 +9,8 @@ vi.mock('../src/services/transaction.service.js', async () => {
 });
 vi.mock('../src/services/audit.service.js', () => ({ recordAudit: vi.fn() }));
 import { prisma } from '../src/lib/prisma.js';
-import { replaceWorkingHours, savePresets } from '../src/services/availability.service.js';
+import { replaceWorkingHours, savePresets, saveDefaultTiming } from '../src/services/availability.service.js';
+import { effectiveWorkingHours, getDefaultTiming } from '../src/utils/defaultTiming.js';
 import { presetsSchema } from '../src/validation/doctor.schemas.js';
 import { generateCandidateWindows } from '../src/services/slot.service.js';
 const window = { dayOfWeek: 1, availableDate: '2030-01-07', startTime: '09:00', endTime: '15:00', isActive: true };
@@ -19,6 +20,29 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 describe('dated availability and favorite ranges', () => {
+  it('saves one unnamed default and keeps explicit custom days', async () => {
+    const timing = { startTime: '09:00', endTime: '15:00' };
+    await saveDefaultTiming('user', 'doctor', timing);
+    expect(prisma.doctorProfile.update).toHaveBeenCalledWith({ where: { id: 'doctor' }, data: { availabilityPresets: [{ ...timing, isDefault: true }] } });
+    expect(prisma.doctorWorkingHour.deleteMany).not.toHaveBeenCalled();
+  });
+  it('default covers every day and rolls forward; custom and inactive days take precedence', () => {
+    const presets = [{ startTime: '09:00', endTime: '15:00', isDefault: true }];
+    const override = { dayOfWeek: 1, availableDate: new Date('2030-01-07'), startTime: new Date('1970-01-01T10:00Z'), endTime: new Date('1970-01-01T12:00Z'), isActive: false };
+    const rows = effectiveWorkingHours([override], presets);
+    expect(rows.filter((row) => row.availableDate.toISOString().slice(0, 10) >= '2030-01-07')).toHaveLength(7);
+    expect(rows.filter((row) => row.availableDate.toISOString().startsWith('2030-01-07'))).toEqual([override]);
+    vi.setSystemTime(new Date('2030-01-08T00:00Z'));
+    expect(effectiveWorkingHours([override], presets).some((row) => row.availableDate.toISOString().startsWith('2030-01-14'))).toBe(true);
+  });
+  it('does not automatically publish old named favorites as default hours', () => {
+    expect(getDefaultTiming([{ label: 'Old favorite', startTime: '09:00', endTime: '15:00' }])).toBeNull();
+  });
+  it('omits inherited rows when saving daily overrides so future default edits still apply', async () => {
+    prisma.doctorProfile.findUnique.mockResolvedValue({ verificationStatus: 'VERIFIED', availabilityPresets: [{ startTime: '09:00', endTime: '15:00', isDefault: true }] });
+    await replaceWorkingHours('user', 'doctor', { timezone: 'Asia/Kolkata', windows: [{ ...window, useDefault: true }] });
+    expect(prisma.doctorWorkingHour.createMany).not.toHaveBeenCalled();
+  });
   it('persists an explicit date, not a repeating weekday', async () => {
     await replaceWorkingHours('user', 'doctor', { timezone: 'Asia/Kolkata', windows: [window] });
     expect(prisma.doctorWorkingHour.createMany).toHaveBeenCalledWith({ data: [expect.objectContaining({ availableDate: new Date('2030-01-07'), dayOfWeek: 1 })] });

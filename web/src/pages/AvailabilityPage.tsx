@@ -15,29 +15,24 @@ import {
 } from "../components";
 import type { Block, WorkingHour } from "../types";
 
-const quickWindows = [
-  { label: "Morning", startTime: "09:00", endTime: "12:00" },
-  { label: "Afternoon", startTime: "13:00", endTime: "17:00" },
-  { label: "Evening", startTime: "18:00", endTime: "21:00" },
-];
+type DefaultTiming = { startTime: string; endTime: string };
 export function AvailabilityPage() {
   const { profile, reload } = useAuth();
   const hours = useResource<WorkingHour[]>("/api/doctor/availability");
   const blocks = useResource<Block[]>("/api/doctor/blocked-slots");
-  const presets = useResource<typeof quickWindows>("/api/doctor/availability/presets");
-  async function savePresets(next: typeof quickWindows) {
-    setBusy(true); setError("");
-    try {
-      await mutate("/api/doctor/availability/presets", "PUT", { presets: next });
-      presets.reload();
-      setNotice("Favorite times saved. Select a favorite on any date below to apply it.");
-    } catch (e) { setError((e as Error).message); }
-    finally { setBusy(false); }
-  }
-  function addPreset(event: FormEvent<HTMLFormElement>) {
+  const timing = useResource<DefaultTiming | null>("/api/doctor/availability/default-timing");
+  async function saveDefault(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
-    void savePresets([...(presets.data ?? []), { label: String(values.label), startTime: String(values.startTime), endTime: String(values.endTime) }]);
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await mutate("/api/doctor/availability/default-timing", "PUT", {
+        timing: { startTime: String(values.startTime), endTime: String(values.endTime) }
+      });
+      timing.reload(); hours.reload();
+      setNotice("Default timing saved and applied to all days without custom hours.");
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
   }
   const [windows, setWindows] = useState<WorkingHour[]>([]),
     [busy, setBusy] = useState(false),
@@ -47,8 +42,9 @@ export function AvailabilityPage() {
   useEffect(() => {
     if (hours.data)
       setWindows(
-        (profile!.timezone === "Asia/Kolkata" ? hours.data : []).filter((row) => !row.availableDate || row.availableDate >= DateTime.now().setZone("Asia/Kolkata").toISODate()!).map(({ dayOfWeek, availableDate, startTime, endTime, isActive }) => ({
+        (profile!.timezone === "Asia/Kolkata" ? hours.data : []).filter((row) => !row.availableDate || row.availableDate >= DateTime.now().setZone("Asia/Kolkata").toISODate()!).map(({ dayOfWeek, availableDate, startTime, endTime, isActive, useDefault }) => ({
           dayOfWeek,
+          useDefault,
           availableDate,
           startTime,
           endTime,
@@ -130,7 +126,7 @@ export function AvailabilityPage() {
   }
   function update(index: number, change: Partial<WorkingHour>) {
     setWindows((old) =>
-      old.map((row, i) => (i === index ? { ...row, ...change } : row)),
+      old.map((row, i) => (i === index ? { ...row, ...change, useDefault: false } : row)),
     );
   }
   function addWindow(dayOfWeek: number, startTime: string, endTime: string) {
@@ -145,7 +141,7 @@ export function AvailabilityPage() {
       )
         return current;
       const date = today.plus({ days: (dayOfWeek - today.weekday + 7) % 7 }).toISODate()!;
-      return [...current, { dayOfWeek, availableDate: date, startTime, endTime, isActive: true }];
+      return [...current.map((row) => row.dayOfWeek === dayOfWeek ? { ...row, useDefault: false } : row), { dayOfWeek, availableDate: date, startTime, endTime, isActive: true, useDefault: false }];
     });
   }
   const today = DateTime.now().setZone("Asia/Kolkata").startOf("day");
@@ -172,23 +168,18 @@ export function AvailabilityPage() {
         </p>
       )}
       <section className="card">
-        <h2>Your favorite time ranges</h2>
-        <p>Save a range once, then apply it to any of the next seven dates. Saving a favorite does not open bookings.</p>
-        <ErrorState message={presets.error} />
-        <form onSubmit={addPreset}>
-          <fieldset disabled={busy || presets.loading || Boolean(presets.error)}>
+        <h2>Default timing</h2>
+        <p>Set your start and end time once. It applies every day within the next seven days, unless you set custom hours or mark a day inactive.</p>
+        <ErrorState message={timing.error} />
+        <form onSubmit={saveDefault} key={JSON.stringify(timing.data)}>
+          <fieldset disabled={busy || timing.loading || hours.loading || Boolean(timing.error || hours.error)}>
             <div className="form-grid">
-              <label>Favorite name<input name="label" required maxLength={50} placeholder="My daytime hours" /></label>
-              <label>Favorite start<input name="startTime" type="time" required /></label>
-              <label>Favorite end<input name="endTime" type="time" required /></label>
+              <label>Starting time<input name="startTime" type="time" defaultValue={timing.data?.startTime ?? ""} required /></label>
+              <label>Working until<input name="endTime" type="time" defaultValue={timing.data?.endTime ?? ""} required /></label>
             </div>
-            <button className="button secondary" disabled={(presets.data?.length ?? 0) >= 20}>Save favorite</button>
+            <button className="button secondary">Save default timing</button>
           </fieldset>
         </form>
-        {presets.data?.map((preset, index) => <div className="blocked-item" key={index}>
-          <span>{preset.label} · {preset.startTime}–{preset.endTime}</span>
-          <button className="button secondary small" disabled={busy} onClick={() => void savePresets(presets.data!.filter((_, i) => i !== index))}>Remove favorite</button>
-        </div>)}
       </section>
       <form className="card" onSubmit={save}>
         <fieldset disabled={busy || hours.loading || Boolean(hours.error)}>
@@ -196,7 +187,7 @@ export function AvailabilityPage() {
               <div>
                 <h2>Your next seven days</h2>
                 <p>
-                  Open only the dates below. These hours expire after that date and do not repeat next week.
+                  Default timing applies automatically. Edit a date for custom hours, or untick Active to take that day off. Custom hours apply only to that date.
               </p>
             </div>
             <span className="help">All availability uses India Standard Time (IST).</span>
@@ -209,7 +200,7 @@ export function AvailabilityPage() {
                 <div className="day-heading">
                   <strong>{day.isToday ? "Today" : day.dayName}</strong>
                   <span>{day.dateLabel}</span>
-                  <small>This date only</small>
+                  <small>{windows.some((row) => row.dayOfWeek === day.dayOfWeek && row.useDefault) ? "Default timing" : "Custom timing · this date only"}</small>
                 </div>
                 <div className="day-windows">
                   {windows.map(
@@ -251,7 +242,9 @@ export function AvailabilityPage() {
                             className="icon-button"
                             aria-label={`Remove ${day.dayName} window`}
                             onClick={() =>
-                              setWindows(windows.filter((_, n) => n !== index))
+                              setWindows(windows.filter((_, n) => n !== index).some((row) => row.dayOfWeek === day.dayOfWeek)
+                                ? windows.filter((_, n) => n !== index)
+                                : windows.map((row, n) => n === index ? { ...row, isActive: false, useDefault: false } : row))
                             }
                           >
                             <TrashIcon />
@@ -260,26 +253,22 @@ export function AvailabilityPage() {
                       ),
                   )}
                   {!windows.some((w) => w.dayOfWeek === day.dayOfWeek) && (
-                    <span className="muted">No time is available yet. Choose a quick period or add your own.</span>
+                    <span className="muted">Set default timing above or add custom hours for this date.</span>
                   )}
                   <div className="quick-windows" aria-label={`${day.dayName} quick times`}>
-                    {[...(presets.data ?? []), ...quickWindows].map((window, presetIndex) => (
-                      <button
-                        className="quick-window"
-                        type="button"
-                        key={presetIndex}
-                        onClick={() => addWindow(day.dayOfWeek, window.startTime, window.endTime)}
-                      >
-                        {window.label} <small>{window.startTime}–{window.endTime}</small>
-                      </button>
-                    ))}
+                    {timing.data && !windows.some((row) => row.dayOfWeek === day.dayOfWeek && row.useDefault) && <button
+                      type="button" className="quick-window"
+                      onClick={() => setWindows((current) => [...current.filter((row) => row.dayOfWeek !== day.dayOfWeek), {
+                        dayOfWeek: day.dayOfWeek, availableDate: today.plus({ days: (day.dayOfWeek - today.weekday + 7) % 7 }).toISODate()!,
+                        ...timing.data!, isActive: true, useDefault: true
+                      }])}>Use default timing</button>}
                     <button
                       type="button"
                       className="quick-window custom-window"
                       aria-label={`Add ${day.dayName} window`}
-                      onClick={() => addWindow(day.dayOfWeek, "09:00", "12:00")}
+                      onClick={() => addWindow(day.dayOfWeek, "", "")}
                     >
-                      <PlusIcon size={16} /> Add custom time
+                      <PlusIcon size={16} /> Add custom timing
                     </button>
                   </div>
                 </div>

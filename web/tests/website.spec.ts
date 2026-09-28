@@ -42,6 +42,8 @@ async function mockWorkspace(page: Page, doctorProfile = profile) {
     const path = new URL(route.request().url()).pathname;
     const data = path.endsWith("/refresh")
       ? { accessToken: "test-only" }
+      : path.endsWith("/availability/default-timing")
+        ? null
       : path.endsWith("/auth/me")
         ? { id: "test-doctor", role: "DOCTOR" }
         : path.endsWith("/profile")
@@ -278,34 +280,45 @@ test("availability saves multiple and overnight periods through API", async ({
   expect((await request).postDataJSON()).toEqual({
     timezone: "Asia/Kolkata",
     windows: [
-      { dayOfWeek: 1, availableDate: DateTime.now().setZone("Asia/Kolkata").plus({ days: (8 - DateTime.now().setZone("Asia/Kolkata").weekday) % 7 }).toISODate(), startTime: "23:00", endTime: "03:00", isActive: true },
+      { dayOfWeek: 1, availableDate: DateTime.now().setZone("Asia/Kolkata").plus({ days: (8 - DateTime.now().setZone("Asia/Kolkata").weekday) % 7 }).toISODate(), startTime: "23:00", endTime: "03:00", isActive: true, useDefault: false },
     ],
   });
   await expect(page.getByText("Working hours saved.")).toBeVisible();
 });
 
-test("favorite time ranges persist and apply to a dated day", async ({ page }) => {
+test("default timing applies to seven days and permits a custom daily override", async ({ page }) => {
   await mockWorkspace(page, { ...profile, verificationStatus: "VERIFIED", isAcceptingBookings: true });
-  let presets: { label: string; startTime: string; endTime: string }[] = [];
-  await page.route("**/api/doctor/availability/presets", async (route) => {
-    if (route.request().method() === "PUT") presets = route.request().postDataJSON().presets;
-    return route.fulfill({ json: { success: true, data: presets } });
+  let timing: { startTime: string; endTime: string } | null = null;
+  await page.route("**/api/doctor/availability/default-timing", async (route) => {
+    if (route.request().method() === "PUT") timing = route.request().postDataJSON().timing;
+    return route.fulfill({ json: { success: true, data: timing } });
+  });
+  await page.route("**/api/doctor/availability", async (route) => {
+    const today = DateTime.now().setZone("Asia/Kolkata");
+    const rows = timing ? Array.from({ length: 7 }, (_, offset) => ({
+      ...timing, dayOfWeek: today.plus({ days: offset }).weekday,
+      availableDate: today.plus({ days: offset }).toISODate(), isActive: true, useDefault: true
+    })) : [];
+    return route.fulfill({ json: { success: true, data: rows } });
   });
   await page.goto("/doctor/availability");
-  await page.getByLabel("Favorite name").fill("Daytime");
-  await page.getByLabel("Favorite start").fill("09:00");
-  await page.getByLabel("Favorite end").fill("15:00");
-  await page.getByRole("button", { name: "Save favorite", exact: true }).click();
-  await expect(page.getByRole("button", { name: /Daytime 09:00/ })).toHaveCount(7);
+  await expect(page.getByLabel("Favorite name")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Morning|Afternoon|Evening/ })).toHaveCount(0);
+  await page.getByLabel("Starting time").fill("09:00");
+  await page.getByLabel("Working until").fill("15:00");
+  await page.getByRole("button", { name: "Save default timing" }).click();
+  await expect(page.locator(".day-windows input[type=time]")).toHaveCount(14);
   await page.reload();
-  await page.getByRole("button", { name: /Daytime 09:00/ }).first().click();
+  const day = DateTime.now().setZone("Asia/Kolkata").toFormat("cccc");
+  await expect(page.getByLabel(day + " start", { exact: true })).toHaveValue("09:00");
+  await page.getByLabel(day + " start", { exact: true }).fill("10:00");
   const request = page.waitForRequest((r) => r.url().endsWith("/api/doctor/availability") && r.method() === "PUT");
   await page.getByRole("button", { name: "Save working hours" }).click();
-  expect((await request).postDataJSON().windows).toEqual([expect.objectContaining({
-    availableDate: DateTime.now().setZone("Asia/Kolkata").toISODate(),
-    startTime: "09:00", endTime: "15:00"
-  })]);
+  const rows = (await request).postDataJSON().windows;
+  expect(rows.filter((row: { useDefault: boolean }) => row.useDefault)).toHaveLength(6);
+  expect(rows[0]).toMatchObject({ startTime: "10:00", endTime: "15:00", useDefault: false });
 });
+
 test("sign-in requests an email code and keeps tokens out of browser storage", async ({
   page,
 }) => {

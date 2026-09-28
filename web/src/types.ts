@@ -103,6 +103,7 @@ export interface Dashboard {
   timezone: string;
 }
 export interface WorkingHour {
+  useDefault?: boolean;
   availableDate?: string;
   dayOfWeek: number;
   startTime: string;

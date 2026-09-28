@@ -1,6 +1,7 @@
 import { AppError } from '../errors/AppError.js';
 import { DateTime } from 'luxon';
 import { bookingWindow } from '../utils/bookingWindow.js';
+import { effectiveWorkingHours, getDefaultTiming } from '../utils/defaultTiming.js';
 import { prisma } from '../lib/prisma.js';
 import { assertTimezone, parseTimeToDate } from '../utils/time.js';
 import { recordAudit } from './audit.service.js';
@@ -28,7 +29,30 @@ function assertNoWeeklyOverlap(windows) {
 }
 
 export async function getWorkingHours(doctorId) {
-  return (await prisma.doctorWorkingHour.findMany({ where: { doctorId }, orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }] })).map(serializeWorkingHour);
+  const rows = await prisma.doctorWorkingHour.findMany({ where: { doctorId }, orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }] });
+  const profile = await prisma.doctorProfile.findUnique({ where: { id: doctorId }, select: { availabilityPresets: true } });
+  const { today } = bookingWindow();
+  return effectiveWorkingHours(rows, profile.availabilityPresets)
+    .filter((row) => row.availableDate && row.availableDate.toISOString().slice(0, 10) >= today.toISODate())
+    .map(serializeWorkingHour);
+}
+
+export async function readDefaultTiming(doctorId) {
+  return getDefaultTiming(await getPresets(doctorId));
+}
+
+export async function saveDefaultTiming(userId, doctorId, timing) {
+  return serialTransaction(async (tx) => {
+    await lockUser(tx, userId);
+    await lockDoctor(tx, doctorId);
+    const doctor = await tx.doctorProfile.findUnique({ where: { id: doctorId } });
+    if (doctor?.verificationStatus !== 'VERIFIED') throw new AppError(403, 'DOCTOR_NOT_VERIFIED', 'Professional verification required.');
+    const presets = timing ? [{ ...timing, isDefault: true }] : [];
+    const rows = await tx.doctorWorkingHour.findMany({ where: { doctorId } });
+    assertNoWeeklyOverlap(effectiveWorkingHours(rows, presets).map(serializeWorkingHour));
+    await tx.doctorProfile.update({ where: { id: doctorId }, data: { availabilityPresets: presets } });
+    return timing;
+  });
 }
 
 export async function getPresets(doctorId) {
@@ -50,7 +74,7 @@ export async function savePresets(userId, doctorId, presets) {
 export async function replaceWorkingHours(userId, doctorId, { timezone, windows }, context = {}) {
   assertTimezone(timezone);
   const { today, end: horizon } = bookingWindow();
-  windows = windows.map((window) => {
+  windows = windows.filter((window) => !window.useDefault).map((window) => {
     const date = window.availableDate
       ? DateTime.fromISO(window.availableDate, { zone: 'Asia/Kolkata' })
       : today.plus({ days: (window.dayOfWeek - today.weekday + 7) % 7 });
@@ -65,8 +89,11 @@ export async function replaceWorkingHours(userId, doctorId, { timezone, windows 
   return serialTransaction(async (tx) => {
     await lockUser(tx, userId);
     await lockDoctor(tx, doctorId);
-    const doctor = await tx.doctorProfile.findUnique({ where: { id: doctorId }, select: { verificationStatus: true } });
+    const doctor = await tx.doctorProfile.findUnique({ where: { id: doctorId }, select: { verificationStatus: true, availabilityPresets: true } });
     if (doctor?.verificationStatus !== 'VERIFIED') throw new AppError(403, 'DOCTOR_NOT_VERIFIED', 'Professional verification is required to manage availability.');
+    assertNoWeeklyOverlap(effectiveWorkingHours(windows.map((window) => ({
+      ...window, availableDate: new Date(window.availableDate), startTime: parseTimeToDate(window.startTime), endTime: parseTimeToDate(window.endTime)
+    })), doctor.availabilityPresets).map(serializeWorkingHour));
     await tx.doctorWorkingHour.deleteMany({ where: { doctorId } });
     if (windows.length) {
       await tx.doctorWorkingHour.createMany({ data: windows.map((window) => ({

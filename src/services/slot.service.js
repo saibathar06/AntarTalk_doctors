@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { bookingWindow } from '../utils/bookingWindow.js';
+import { effectiveWorkingHours } from '../utils/defaultTiming.js';
 import { scheduling } from '../config/constants.js';
 import { AppError } from '../errors/AppError.js';
 import { prisma } from '../lib/prisma.js';
@@ -101,6 +102,7 @@ export async function getAvailableSlots(
     where: { id: doctorId },
     select: {
       ...doctorProfileSelect,
+      availabilityPresets: true,
       id: true,
       timezone: true,
       verificationStatus: true,
@@ -113,7 +115,6 @@ export async function getAvailableSlots(
         },
       },
       workingHours: {
-        where: { isActive: true },
       },
     },
   });
@@ -130,6 +131,7 @@ export async function getAvailableSlots(
 
   const now = new Date();
   const horizon = bookingWindow(now).end;
+  profile.workingHours = effectiveWorkingHours(profile.workingHours, profile.availabilityPresets).filter((row) => row.isActive !== false);
   const candidates = generateCandidateWindows(profile, from, to).filter(
     (slot) => slot.startTime > now && slot.endTime <= horizon
   );
