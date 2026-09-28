@@ -54,6 +54,10 @@ describe('dated availability and favorite ranges', () => {
   it('rejects the final date spilling outside the booking window', async () => {
     await expect(replaceWorkingHours('user', 'doctor', { timezone: 'Asia/Kolkata', windows: [{ ...window, dayOfWeek: 7, availableDate: '2030-01-13', startTime: '23:00', endTime: '03:00' }] })).rejects.toMatchObject({ code: 'OUTSIDE_BOOKING_WINDOW' });
   });
+  it('allows the final overnight default day to be marked inactive', async () => {
+    await expect(replaceWorkingHours('user', 'doctor', { timezone: 'Asia/Kolkata', windows: [{ ...window, dayOfWeek: 7, availableDate: '2030-01-13', startTime: '23:00', endTime: '03:00', isActive: false }] })).resolves.toEqual([]);
+    expect(prisma.doctorWorkingHour.createMany).toHaveBeenCalledWith({ data: [expect.objectContaining({ isActive: false })] });
+  });
   it('detects overlapping overnight ranges on adjacent dates', async () => {
     await expect(replaceWorkingHours('user', 'doctor', { timezone: 'Asia/Kolkata', windows: [
       { ...window, startTime: '23:00', endTime: '03:00' },

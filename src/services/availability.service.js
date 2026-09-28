@@ -80,7 +80,7 @@ export async function replaceWorkingHours(userId, doctorId, { timezone, windows 
       : today.plus({ days: (window.dayOfWeek - today.weekday + 7) % 7 });
     let end = date.plus({ minutes: minutes(window.endTime) });
     if (window.endTime <= window.startTime) end = end.plus({ days: 1 });
-    if (!date.isValid || date < today || date.toJSDate() >= horizon || end.toJSDate() > horizon || date.weekday !== window.dayOfWeek) {
+    if (!date.isValid || date < today || date.toJSDate() >= horizon || (window.isActive && end.toJSDate() > horizon) || date.weekday !== window.dayOfWeek) {
       throw new AppError(422, 'OUTSIDE_BOOKING_WINDOW', 'Choose availability within today and the next six days in IST.');
     }
     return { ...window, availableDate: date.toISODate() };
