@@ -59,16 +59,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setViewer(null);
   }
   useEffect(() => {
-    // Public client booking does not use the Doctors-app refresh cookie. It has
-    // its own short-lived, in-memory client session inside the booking page.
-    if (
-      window.location.pathname.startsWith("/book-session/") ||
-      window.location.pathname === "/my-bookings" ||
-      window.location.pathname.startsWith("/client-call")
-    ) {
-      setLoading(false);
-      return;
-    }
     refreshSession()
       .then(reload)
       .catch((error) => {
