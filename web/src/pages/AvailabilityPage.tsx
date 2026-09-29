@@ -126,6 +126,7 @@ export function AvailabilityPage() {
       dayName: date.toFormat("cccc"),
       dateLabel: date.toFormat("ccc, d LLL"),
       dateKey: date.toISODate()!,
+      date,
       isToday: offset === 0,
     };
   });
@@ -173,6 +174,8 @@ export function AvailabilityPage() {
             visibleDays.map((day) => {
               const daySlots = (slots.data ?? []).filter((slot) => DateTime.fromISO(slot.startTime, { zone: "utc" }).setZone("Asia/Kolkata").toISODate() === day.dateKey);
               const dayBlocks = (blocks.data ?? []).filter((item) => DateTime.fromISO(item.startTime, { zone: "utc" }).setZone("Asia/Kolkata").toISODate() === day.dateKey);
+              const overnightWindow = windows.find((row) => row.dayOfWeek === day.dayOfWeek && row.isActive && Boolean(row.startTime) && Boolean(row.endTime) && row.endTime < row.startTime);
+              const followingDate = day.date.plus({ days: 1 });
               return <section className={`day-row ${day.isToday ? "today" : ""}`} key={`${day.dayOfWeek}-${day.dateLabel}`}>
                 <div className="day-heading">
                   <strong>{day.isToday ? "Today" : day.dayName}</strong>
@@ -256,6 +259,7 @@ export function AvailabilityPage() {
                       </div>
                       <small>{daySlots.length} available{dayBlocks.length ? ` · ${dayBlocks.length} blocked` : ""}</small>
                     </div>
+                    {overnightWindow && <p className="help">This timing continues into the next day. Appointment times from 12:00 AM are shown under {followingDate.toFormat("cccc, d LLL")}.</p>}
                     {slots.loading || blocks.loading ? <LoadingState label="Generating appointment times…" /> : (
                       <div className="day-slot-grid" aria-label={`${day.dayName} appointment times`}>
                         {daySlots.map((slot) => {

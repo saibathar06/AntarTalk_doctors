@@ -23,6 +23,18 @@ describe('dynamic slot generation', () => {
     ]);
   });
 
+  it('keeps the midnight appointment in the following calendar day for a 10:00–01:00 range', () => {
+    const profile = {
+      timezone: 'UTC',
+      workingHours: [{ dayOfWeek: 1, startTime: new Date('1970-01-01T10:00:00Z'), endTime: new Date('1970-01-01T01:00:00Z') }]
+    };
+    const slots = generateCandidateWindows(profile, new Date('2026-09-21T00:00:00Z'), new Date('2026-09-22T02:00:00Z'));
+    expect(slots).toHaveLength(15);
+    expect(slots[0].startTime.toISOString()).toBe('2026-09-21T10:00:00.000Z');
+    expect(slots.at(-1).startTime.toISOString()).toBe('2026-09-22T00:00:00.000Z');
+    expect(slots.at(-1).endTime.toISOString()).toBe('2026-09-22T01:00:00.000Z');
+  });
+
   it('does not create a partial trailing appointment window', () => {
     const profile = {
       timezone: 'UTC',
