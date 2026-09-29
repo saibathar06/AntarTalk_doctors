@@ -171,7 +171,12 @@ export function AvailabilityPage() {
           {hours.loading ? (
             <LoadingState />
           ) : (
-            visibleDays.map((day) => {
+            visibleDays.filter((day) => {
+              if (!day.isToday || slots.loading || blocks.loading) return true;
+              const hasLiveSlot = (slots.data ?? []).some((slot) => DateTime.fromISO(slot.startTime, { zone: "utc" }).setZone("Asia/Kolkata").toISODate() === day.dateKey);
+              const hasBlock = (blocks.data ?? []).some((item) => DateTime.fromISO(item.startTime, { zone: "utc" }).setZone("Asia/Kolkata").toISODate() === day.dateKey);
+              return hasLiveSlot || hasBlock;
+            }).map((day) => {
               const daySlots = (slots.data ?? []).filter((slot) => DateTime.fromISO(slot.startTime, { zone: "utc" }).setZone("Asia/Kolkata").toISODate() === day.dateKey);
               const dayBlocks = (blocks.data ?? []).filter((item) => DateTime.fromISO(item.startTime, { zone: "utc" }).setZone("Asia/Kolkata").toISODate() === day.dateKey);
               const overnightWindow = windows.find((row) => row.dayOfWeek === day.dayOfWeek && row.isActive && Boolean(row.startTime) && Boolean(row.endTime) && row.endTime < row.startTime);
