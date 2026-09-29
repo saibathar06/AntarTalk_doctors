@@ -1,8 +1,7 @@
-import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { AppError } from '../errors/AppError.js';
 import { prisma } from '../lib/prisma.js';
-import { canDoctorTakeSessions } from './eligibility.service.js';
+import { createVideoTicket } from './video.service.js';
 
 const sessionSelect = {
   id: true,
@@ -38,17 +37,13 @@ export function joinExpiry(booking, now = Date.now()) {
   return Math.floor(therapyEnd / 1000);
 }
 
-export async function createJoinAccess(doctorId, bookingId) {
+export async function createJoinAccess(userId, doctorId, bookingId, surface = 'WEB') {
   const doctor = await prisma.doctorProfile.findUnique({ where: { id: doctorId }, include: { user: { select: { role: true, accountStatus: true, emailVerifiedAt: true } } } });
-  if (!canDoctorTakeSessions(doctor)) throw new AppError(403, 'DOCTOR_NOT_ELIGIBLE', 'Your profile must be complete, verified, active and accepting bookings to join.');
+  if (!doctor || doctor.userId !== userId || doctor.verificationStatus !== 'VERIFIED' || doctor.user.role !== 'DOCTOR' || doctor.user.accountStatus !== 'ACTIVE' || !doctor.user.emailVerifiedAt) {
+    throw new AppError(403, 'DOCTOR_NOT_ELIGIBLE', 'A verified, active doctor account is required to join.');
+  }
   const booking = await getSession(doctorId, bookingId);
   if (booking.status !== 'CONFIRMED') throw new AppError(409, 'SESSION_NOT_JOINABLE', 'Only confirmed sessions can be joined.');
-  const now = Date.now();
-  const exp = joinExpiry(booking, now);
-  const sessionAccessToken = jwt.sign(
-    { doctorId, bookingId, role: 'DOCTOR', exp },
-    env.JWT_ACCESS_SECRET,
-    { subject: doctorId, algorithm: 'HS256', issuer: 'antartalk-api', audience: 'antartalk-session' }
-  );
-  return { bookingId, roomId: `booking:${bookingId}`, sessionAccessToken, expiresIn: exp - Math.floor(now / 1000) };
+  joinExpiry(booking);
+  return createVideoTicket({ bookingId, userId, audience: 'DOCTOR', surface });
 }

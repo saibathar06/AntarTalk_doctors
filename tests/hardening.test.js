@@ -4,6 +4,7 @@ vi.mock('../src/lib/prisma.js', () => ({ prisma: {
   booking: { findFirst: vi.fn() },
   doctorProfile: { findUnique: vi.fn() }
 } }));
+vi.mock('../src/services/video.service.js', () => ({ createVideoTicket: vi.fn(async ({ bookingId }) => ({ bookingId, launchUrl: 'https://video.example/call?t=one-use', expiresAt: '2030-01-01T14:01:00Z', videoOrigin: 'https://video.example' })) }));
 import { prisma } from '../src/lib/prisma.js';
 import { joinExpiry, getSession, createJoinAccess } from '../src/services/session.service.js';
 import { validatePayment } from '../src/services/payment.service.js';
@@ -12,7 +13,6 @@ import { amount, currency } from '../src/validation/common.js';
 import { updateProfileSchema } from '../src/validation/doctor.schemas.js';
 import { encryptProviderToken } from '../src/utils/encryption.js';
 import { serializeWorkingHour } from '../src/services/availability.service.js';
-import jwt from 'jsonwebtoken';
 
 const start = new Date('2030-01-01T14:00:00Z');
 const booking = { id: 'booking', startTime: start, endTime: new Date('2030-01-01T15:00:00Z'), sessionDurationMinutes: 40, status: 'CONFIRMED', earning: null };
@@ -23,13 +23,13 @@ beforeEach(() => {
     professionalCategory: 'PSYCHOLOGIST', professionalStatus: 'LICENSED_PROFESSIONAL',
     experienceYears: 0, qualification: 'MSc', licenseNumber: 'TEST', consultationFee: 1200, bio: 'Test bio',
     languages: ['English'], preferredSessionLanguage: 'English', expertise: ['Anxiety'], verificationStatus: 'VERIFIED',
-    isAcceptingBookings: true, timezone: 'Asia/Kolkata', user: { role: 'DOCTOR', accountStatus: 'ACTIVE', emailVerifiedAt: start }
+    userId: 'doctor-user', isAcceptingBookings: true, timezone: 'Asia/Kolkata', user: { role: 'DOCTOR', accountStatus: 'ACTIVE', emailVerifiedAt: start }
   });
 });
 describe('therapy authorization boundaries', () => {
   it('rejects join when professional eligibility was revoked', async () => {
     prisma.doctorProfile.findUnique.mockResolvedValue(null);
-    await expect(createJoinAccess('doctor', 'booking')).rejects.toMatchObject({ code: 'DOCTOR_NOT_ELIGIBLE' });
+    await expect(createJoinAccess('doctor-user', 'doctor', 'booking')).rejects.toMatchObject({ code: 'DOCTOR_NOT_ELIGIBLE' });
   });
   it.each([-11, 40, 45, 60, 61])('rejects minute %s', (offset) => {
     expect(() => joinExpiry(booking, +start + offset * 60000)).toThrow();
@@ -45,13 +45,13 @@ describe('therapy authorization boundaries', () => {
   });
   it('rejects cancelled sessions', async () => {
     prisma.booking.findFirst.mockResolvedValue({ ...booking, status: 'CANCELLED' });
-    await expect(createJoinAccess('doctor', 'booking')).rejects.toMatchObject({ code: 'SESSION_NOT_JOINABLE' });
+    await expect(createJoinAccess('doctor-user', 'doctor', 'booking')).rejects.toMatchObject({ code: 'SESSION_NOT_JOINABLE' });
   });
-  it('does not issue tokens extending into the buffer', async () => {
+  it('issues a one-use video-service launch URL only during the therapy window', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(+start);
     prisma.booking.findFirst.mockResolvedValue(booking);
-    const access = await createJoinAccess('doctor', 'booking');
-    expect(jwt.decode(access.sessionAccessToken).exp).toBe((+start + 40 * 60000) / 1000);
+    const access = await createJoinAccess('doctor-user', 'doctor', 'booking');
+    expect(access).toMatchObject({ bookingId: 'booking', videoOrigin: 'https://video.example' });
     vi.restoreAllMocks();
   });
 });

@@ -3,17 +3,22 @@ import { authenticateUser, requireClient } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { confirmBooking } from '../services/booking.service.js';
 import { createRazorpayOrder, verifyRazorpayPayment } from '../services/razorpay.service.js';
-import { getBookableDoctor, readBookableDoctorPhoto } from '../services/bookingDiscovery.service.js';
+import { getBookableDoctor, readBookableDoctorPhoto, searchBookableDoctors } from '../services/bookingDiscovery.service.js';
 import { getAvailableSlots, reserveSlot } from '../services/slot.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { availabilityQuerySchema, confirmSchema, razorpayOrderSchema, razorpayVerifySchema, reserveSchema } from '../validation/booking.schemas.js';
+import { availabilityQuerySchema, confirmSchema, doctorSearchSchema, razorpayOrderSchema, razorpayVerifySchema, reserveSchema } from '../validation/booking.schemas.js';
 import { sensitiveLimiter } from '../middleware/rateLimits.js';
+import { createVideoTicket } from '../services/video.service.js';
 import { z } from 'zod';
 import { uuid } from '../validation/common.js';
 
 export const bookingRouter = Router();
 
 const doctorIdSchema = z.object({ params: z.object({ doctorId: uuid }) });
+
+bookingRouter.get('/doctors/search', validate(doctorSearchSchema), asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await searchBookableDoctors(req.query) });
+}));
 
 bookingRouter.get('/doctors/:doctorId', validate(doctorIdSchema), asyncHandler(async (req, res) => {
   const data = await getBookableDoctor(req.params.doctorId);
@@ -44,6 +49,14 @@ bookingRouter.post('/reserve', authenticateUser, requireClient, sensitiveLimiter
 bookingRouter.post('/confirm', authenticateUser, requireClient, sensitiveLimiter, validate(confirmSchema), asyncHandler(async (req, res) => {
   const data = await confirmBooking(req.user.id, req.body, req.headers['idempotency-key']);
   res.status(201).json({ success: true, data });
+}));
+
+bookingRouter.post('/:bookingId/join', authenticateUser, requireClient, sensitiveLimiter, validate(z.object({
+  params: z.object({ bookingId: uuid }),
+  body: z.object({ surface: z.enum(['WEB', 'MOBILE']).default('WEB') }).default({ surface: 'WEB' })
+})), asyncHandler(async (req, res) => {
+  const data = await createVideoTicket({ bookingId: req.params.bookingId, userId: req.user.id, audience: 'CLIENT', surface: req.body.surface });
+  res.json({ success: true, data });
 }));
 
 bookingRouter.post('/razorpay/order', authenticateUser, requireClient, sensitiveLimiter, validate(razorpayOrderSchema), asyncHandler(async (req, res) => {

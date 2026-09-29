@@ -1,14 +1,17 @@
 import { scheduling } from '../config/constants.js';
+import { env } from '../config/env.js';
 import { AppError } from '../errors/AppError.js';
 import { prisma } from '../lib/prisma.js';
 import { stableHash } from '../utils/crypto.js';
 import { assertStructurallyBookable, deleteReservationIfOwned, readOwnedReservation } from './slot.service.js';
 import { serialTransaction, lockUser, lockDoctor } from './transaction.service.js';
 import { validatePayment } from './payment.service.js';
+import { enqueueBookingNotifications } from './notification.service.js';
 
 const bookingSelect = {
   id: true, doctorId: true, clientId: true, startTime: true, endTime: true,
-  sessionDurationMinutes: true, bufferDurationMinutes: true, status: true, paymentId: true, createdAt: true
+  sessionDurationMinutes: true, bufferDurationMinutes: true, status: true, paymentId: true, createdAt: true,
+  clientName: true, clientAge: true
 };
 
 export async function confirmBooking(clientId, input, idempotencyKey) {
@@ -33,6 +36,11 @@ export async function confirmBooking(clientId, input, idempotencyKey) {
         return replay.responseBody;
       }
       await lockDoctor(tx, input.doctorId);
+      const doctor = await tx.doctorProfile.findUnique({
+        where: { id: input.doctorId },
+        select: { userId: true, firstName: true, lastName: true }
+      });
+      if (!doctor) throw new AppError(404, 'DOCTOR_NOT_FOUND', 'Doctor not found.');
       reservation = await readOwnedReservation(clientId, input);
       const slot = await assertStructurallyBookable(input.doctorId, input.startTime, tx);
       if (reservation.value.endTime !== slot.endTime.toISOString()) throw new AppError(409, 'SLOT_UNAVAILABLE', 'The appointment window changed.');
@@ -62,6 +70,12 @@ export async function confirmBooking(clientId, input, idempotencyKey) {
       } });
       // Durable work is queued in the same transaction as the booking.
       await tx.bookingEmail.createMany({ data: ['CLIENT', 'DOCTOR'].map((audience) => ({ bookingId: created.id, audience })) });
+      await enqueueBookingNotifications(tx, created, doctor);
+      await tx.videoCall.create({ data: {
+        bookingId: created.id,
+        opensAt: new Date(created.startTime.getTime() - env.JOIN_EARLY_MINUTES * 60_000),
+        closesAt: new Date(created.startTime.getTime() + created.sessionDurationMinutes * 60_000)
+      } });
       await readOwnedReservation(clientId, input);
       return created;
     });

@@ -10,25 +10,29 @@ import { confirmBooking } from '../src/services/booking.service.js';
 import { withdraw } from '../src/services/payout.service.js';
 import { encryptProviderToken } from '../src/utils/encryption.js';
 
-let records, bookings, payouts, tail, emails;
+let records, bookings, payouts, tail, emails, notifications, videoCalls;
 const start = new Date('2030-01-01T14:00:00Z');
 const end = new Date('2030-01-01T15:00:00Z');
 const input = { reservationId: 'reservation', doctorId: 'doctor', startTime: start, paymentId: 'payment' };
 beforeEach(() => {
   vi.clearAllMocks();
-  records = new Map(); bookings = []; payouts = []; emails = []; tail = Promise.resolve();
+  records = new Map(); bookings = []; payouts = []; emails = []; notifications = []; videoCalls = []; tail = Promise.resolve();
   const recordKey = (where) => JSON.stringify(where.userId_scope_key);
   Object.assign(prisma, {
     bookingEmail: { createMany: vi.fn(async ({ data }) => { emails.push(...data); return { count: data.length }; }) },
     $queryRaw: vi.fn(),
     user: { findUnique: vi.fn(async () => ({ id: 'client', role: 'CLIENT', accountStatus: 'ACTIVE', emailVerifiedAt: new Date() })) },
-    doctorProfile: { findUnique: vi.fn(async () => ({ userId: 'doctor-user', verificationStatus: 'VERIFIED' })) },
+    doctorProfile: { findUnique: vi.fn(async () => ({ userId: 'doctor-user', firstName: 'Test', lastName: 'Doctor', verificationStatus: 'VERIFIED' })) },
     payment: { findUnique: vi.fn(async () => ({
       clientId: 'client', status: 'SUCCEEDED', doctorId: 'doctor', slotStart: start, slotEnd: end,
       amount: new Prisma.Decimal(100), expectedAmount: new Prisma.Decimal(100),
       currency: 'INR', expectedCurrency: 'INR', doctorEarning: new Prisma.Decimal(80), booking: null
     })) },
     booking: { create: vi.fn(async ({ data }) => { const value = { ...data, id: 'booking' }; bookings.push(value); return value; }) },
+    notification: { create: vi.fn(async ({ data }) => { const value = { ...data, id: `notification-${notifications.length + 1}` }; notifications.push(value); return value; }) },
+    pushDevice: { findMany: vi.fn(async () => []) },
+    pushDelivery: { createMany: vi.fn() },
+    videoCall: { create: vi.fn(async ({ data }) => { videoCalls.push(data); return data; }) },
     idempotencyRecord: {
       findUnique: vi.fn(async ({ where }) => records.get(recordKey(where)) ?? null),
       create: vi.fn(async ({ data }) => records.set(recordKey({ userId_scope_key: { userId: data.userId, scope: data.scope, key: data.key } }), data))
@@ -46,7 +50,8 @@ beforeEach(() => {
   prisma.$transaction = (work) => {
     const run = tail.then(async () => {
       const savedBookings = [...bookings], savedPayouts = [...payouts], savedRecords = new Map(records), savedEmails = [...emails];
-      try { return await work(prisma); } catch (error) { bookings = savedBookings; payouts = savedPayouts; records = savedRecords; emails = savedEmails; throw error; }
+      const savedNotifications = [...notifications], savedVideoCalls = [...videoCalls];
+      try { return await work(prisma); } catch (error) { bookings = savedBookings; payouts = savedPayouts; records = savedRecords; emails = savedEmails; notifications = savedNotifications; videoCalls = savedVideoCalls; throw error; }
     });
     tail = run.catch(() => {});
     return run;
@@ -60,6 +65,8 @@ describe('booking retry regressions', () => {
     const results = await Promise.all(Array.from({ length: 10 }, () => confirmBooking('client', input, 'same-key')));
     expect(bookings).toHaveLength(1);
     expect(emails).toEqual([{ bookingId: 'booking', audience: 'CLIENT' }, { bookingId: 'booking', audience: 'DOCTOR' }]);
+    expect(notifications).toHaveLength(2);
+    expect(videoCalls).toHaveLength(1);
     expect(results.every((r) => r.id === 'booking')).toBe(true);
   });
   it('rejects changed reservation ID under the same key', async () => {
@@ -73,6 +80,8 @@ describe('booking retry regressions', () => {
     expect(bookings).toHaveLength(0);
     expect(records.size).toBe(0);
     expect(emails).toHaveLength(0);
+    expect(notifications).toHaveLength(0);
+    expect(videoCalls).toHaveLength(0);
   });
   it('does not turn committed success into failure if Redis cleanup fails', async () => {
     deleteReservationIfOwned.mockRejectedValue(new Error('Redis unavailable'));

@@ -191,18 +191,24 @@ export function JoinSessionButton({
   appointment: Appointment;
 }) {
   const [busy, setBusy] = useState(false),
-    [message, setMessage] = useState("");
+    [message, setMessage] = useState(""),
+    [launchUrl, setLaunchUrl] = useState<string | null>(null);
   async function join() {
     setBusy(true);
     setMessage("");
     try {
-      await api(`/api/doctor/sessions/${appointment.id}/join`, {
+      const access = await api<{
+        launchUrl: string;
+        videoOrigin: string;
+        expiresAt: string;
+      }>(`/api/doctor/sessions/${appointment.id}/join`, {
         method: "POST",
+        body: JSON.stringify({ surface: "WEB" }),
       });
-      // No video provider exists in this repository. Do not invent a meeting URL.
-      setMessage(
-        "Access authorized. Video calling is not configured yet; contact AntarTalk support.",
-      );
+      const launch = new URL(access.launchUrl);
+      if (launch.origin !== access.videoOrigin || launch.pathname !== "/call")
+        throw new Error("The video service returned an invalid call link.");
+      setLaunchUrl(launch.toString());
     } catch (error) {
       setMessage((error as Error).message);
     } finally {
@@ -230,6 +236,20 @@ export function JoinSessionButton({
             : label}
       </button>
       {message && <p role="status">{message}</p>}
+      {launchUrl && (
+        <div className="video-call-overlay" role="dialog" aria-modal="true" aria-label="AntarTalk video session">
+          <div className="video-call-toolbar">
+            <strong>AntarTalk session</strong>
+            <button className="button ghost small" onClick={() => setLaunchUrl(null)}>Leave call</button>
+          </div>
+          <iframe
+            title="AntarTalk video session"
+            src={launchUrl}
+            allow="camera; microphone; fullscreen; display-capture"
+            referrerPolicy="no-referrer"
+          />
+        </div>
+      )}
     </div>
   );
 }

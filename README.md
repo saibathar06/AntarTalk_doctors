@@ -46,6 +46,8 @@ After deploying, run `npm run db:generate` during build and `npm run db:migrate`
 
 Confirmed bookings queue separate client and doctor emails transactionally. The API processes the queue every 15 seconds using existing SMTP settings, retrying failures up to 10 times. Client emails show doctor, session time and paid amount; doctor emails show only session time and the client-supplied name/age. Older API clients may omit these new optional fields (shown as “Not provided”). Monitor exhausted email jobs in logs/`BookingEmail`; no automatic emails are backfilled for existing bookings. SMTP delivery is at-least-once, not guaranteed exactly-once.
 
+Confirmed bookings also create separate client/doctor in-app notifications and push-delivery jobs in the same transaction. Mobile apps register Expo tokens through `/api/notifications/devices`; delivery failures retry without logging tokens. See [client discovery, notifications and video](docs/CLIENT_DISCOVERY_NOTIFICATIONS_VIDEO.md) for the exact shared web/mobile contracts.
+
 Set these **backend-only** values in Render/local API configuration before using the payment screens. Do not add them to `web/.env.local` or commit them.
 
 ```env
@@ -69,6 +71,7 @@ Razorpay orders are created by the API from the doctor’s stored `consultationF
 - Profile photos accept JPEG, PNG and WebP up to 5 MB. The server decodes, rotates and resizes them to an 800 px maximum JPEG before private storage. Once verified, a doctor can edit personal and client-facing practice information without another review; verified registration credentials and their credential document are locked and must be corrected through support.
 - Dashboard, appointments, clients, profile, uploads, availability, settings and earnings use real APIs. No production demo data. Public doctor discovery includes gender when supplied, except `PREFER_NOT_TO_SAY`.
 - PostgreSQL owns bookings and financial records; Redis owns temporary 180-second holds. Shared exclusion constraints prevent conflicting bookings.
+- Clients can search `/api/bookings/doctors/search` by an exact IST date/time and optional professional filters. The backend—not React—applies the real schedule, blocks, bookings and active Redis holds and returns only available doctors within the rolling seven-day horizon.
 - Default window: **40 minutes therapy + 20 minutes protected buffer = one 60-minute booking**. Configurable via environment.
 - Appointment timestamps remain UTC. New doctor profiles and recurring hours use only `Asia/Kolkata` (IST); overnight `23:00–03:00` ends the next day. Existing appointments retain their UTC timestamps. A legacy non-IST practice must save its profile as IST and recreate its weekly hours; old hours are disabled instead of being silently relabelled.
 - Doctors may request INR withdrawals only on Tuesday in IST, with a ₹500 minimum and available earned funds. Requests remain `PENDING` until admin review. Approval moves them to `PROCESSING`; rejection releases the allocation. With no payout provider configured, the admin must make the real transfer outside the app and then record its reference to mark the payout `COMPLETED`. Approval alone never transfers funds.
@@ -87,7 +90,7 @@ Provision the first ADMIN account through your controlled database/admin process
 
 ## Boundaries
 
-No real video or payout provider, ratings, SMS or appointment-notification worker is connected. Razorpay is connected for INR checkout once its environment keys and webhook are configured. Join returns backend authorization, not a video meeting URL. Financial records are retained on account deletion; unresolved active bookings prevent deletion. New uploads are private and ownership-checked.
+Razorpay is connected for INR checkout once its environment keys and webhook are configured. Push delivery currently uses Expo and requires the mobile apps to register Expo push tokens. The uploaded video API is integrated through its trusted service contract but must be deployed separately with HTTPS/TURN and matching backend-only service credentials before calls work. No payout-transfer provider, ratings or SMS service is connected. Financial records are retained on account deletion; unresolved active bookings prevent deletion. New uploads are private and ownership-checked.
 
 See [website handoff](docs/DOCTOR_WEBSITE.md) for routes, API contracts, environment variables, migration details, changed files and rollout assumptions. Existing backend details: [API changes](docs/API_CHANGES.md), [hardening report](docs/HARDENING_REPORT.md).
 

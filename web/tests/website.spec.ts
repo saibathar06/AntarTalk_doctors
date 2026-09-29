@@ -600,7 +600,7 @@ test("a verified doctor explicitly enters edit mode and cannot alter verified cr
   expect(body).not.toHaveProperty("licenseNumber");
   await expect(page.getByRole("status")).toContainText("verification remains active");
 });
-test("join button follows backend permission and cannot fake a video room", async ({
+test("join button follows backend permission and embeds only the authorized video room", async ({
   page,
 }) => {
   await mockWorkspace(page, { ...profile, verificationStatus: "VERIFIED", isAcceptingBookings: true, profileCompleted: true });
@@ -625,13 +625,31 @@ test("join button follows backend permission and cannot fake a video room", asyn
     page.getByRole("button", { name: "Not ready to join" }),
   ).toBeDisabled();
   item.join = { state: "READY", canJoin: true };
+  await page.route("**/api/doctor/sessions/test-booking/join", (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          launchUrl: "https://video.test/call?ticket=one-use",
+          videoOrigin: "https://video.test",
+          expiresAt: "2030-01-01T09:59:00Z",
+        },
+      },
+    }),
+  );
+  await page.route("https://video.test/call?*", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<main>Secure video call</main>" }),
+  );
   await page.reload();
   const request = page.waitForRequest((request) =>
     request.url().endsWith("/sessions/test-booking/join"),
   );
   await page.getByRole("button", { name: "Join session" }).click();
   expect((await request).method()).toBe("POST");
-  await expect(page.getByText(/Video calling is not configured/)).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "AntarTalk video session" })).toBeVisible();
+  await expect(page.locator('iframe[title="AntarTalk video session"]')).toHaveAttribute("src", /https:\/\/video\.test\/call\?ticket=one-use/);
+  await page.getByRole("button", { name: "Leave call" }).click();
+  await expect(page.getByRole("dialog", { name: "AntarTalk video session" })).toBeHidden();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,

@@ -18,10 +18,12 @@ import { authRouter } from './routes/auth.routes.js';
 import { bookingRouter } from './routes/booking.routes.js';
 import { doctorRouter } from './routes/doctor.routes.js';
 import { doctorAuthRouter } from './routes/doctorAuth.routes.js';
+import { notificationRouter } from './routes/notification.routes.js';
 import { handleRazorpayWebhook } from './services/razorpay.service.js';
 import { asyncHandler } from './utils/asyncHandler.js';
 
 export const app = express();
+const videoFrameOrigin = env.VIDEO_SERVICE_URL ? new URL(env.VIDEO_SERVICE_URL).origin : null;
 app.disable('x-powered-by');
 app.set('trust proxy', env.TRUST_PROXY ? env.TRUST_PROXY.split(',').map((v) => v.trim()) : false);
 app.use((req, res, next) => {
@@ -38,7 +40,7 @@ app.use(pinoHttp({ logger, genReqId: (req) => req.id, serializers: {
 app.use(helmet({ contentSecurityPolicy: { directives: {
   imgSrc: ["'self'", 'data:', 'blob:'],
   scriptSrc: ["'self'", 'https://checkout.razorpay.com'],
-  frameSrc: ["'self'", 'https://api.razorpay.com', 'https://checkout.razorpay.com'],
+  frameSrc: ["'self'", 'https://api.razorpay.com', 'https://checkout.razorpay.com', ...(videoFrameOrigin ? [videoFrameOrigin] : [])],
   connectSrc: ["'self'"]
 } } }));
 app.use(cors({
@@ -71,6 +73,7 @@ app.use('/api/bookings', bookingRouter);
 // Singular alias preserves the requested POST /api/booking/confirm contract.
 app.use('/api/booking', bookingRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/notifications', notificationRouter);
 
 const webRoot = fileURLToPath(new URL('../web/dist/', import.meta.url));
 app.use('/assets', express.static(path.join(webRoot, 'assets'), { immutable: true, maxAge: '1y' }));

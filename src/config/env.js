@@ -56,7 +56,14 @@ const schema = z.object({
   RAZORPAY_KEY_SECRET: z.string().min(1).optional(),
   RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional(),
   RAZORPAY_CURRENCY: z.literal('INR').default('INR'),
-  PLATFORM_COMMISSION_PERCENT: z.coerce.number().min(0).max(99.99).default(20)
+  PLATFORM_COMMISSION_PERCENT: z.coerce.number().min(0).max(99.99).default(20),
+  EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
+  PUSH_DELIVERY_ENABLED: z.string().default('true').transform((v) => v.trim().toLowerCase() === 'true'),
+  VIDEO_SERVICE_URL: z.string().url().optional(),
+  VIDEO_SERVICE_API_KEY: z.string().min(32).optional(),
+  VIDEO_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).default(10000),
+  DOCTOR_WEB_ORIGIN: z.string().url().optional(),
+  CLIENT_WEB_ORIGIN: z.string().url().optional()
 });
 
 const parsed = schema.safeParse(process.env);
@@ -78,6 +85,9 @@ if (Boolean(env.SMTP_USER) !== Boolean(env.SMTP_PASS)) {
 }
 if (Boolean(env.RAZORPAY_KEY_ID) !== Boolean(env.RAZORPAY_KEY_SECRET)) {
   throw new Error('RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET must either both be configured or both be omitted.');
+}
+if (Boolean(env.VIDEO_SERVICE_URL) !== Boolean(env.VIDEO_SERVICE_API_KEY)) {
+  throw new Error('VIDEO_SERVICE_URL and VIDEO_SERVICE_API_KEY must either both be configured or both be omitted.');
 }
 const productionRequirements = {
   payoutEncryptionKeyPresent: Boolean(env.PAYOUT_ENCRYPTION_KEY),

@@ -85,6 +85,25 @@ enum PayoutAccountType {
   UPI
 }
 
+enum PushPlatform {
+  IOS
+  ANDROID
+}
+
+enum NotificationType {
+  SESSION_BOOKED
+  SESSION_CANCELLED
+  SESSION_REMINDER
+}
+
+enum VideoCallState {
+  PENDING
+  SCHEDULED
+  ENDED
+  CANCELLED
+  FAILED
+}
+
 model User {
   id                    String        @id @default(uuid()) @db.Uuid
   email                 String        @unique @db.VarChar(320)
@@ -103,6 +122,8 @@ model User {
   idempotencyRecords     IdempotencyRecord[]
   auditLogs              AuditLog[]    @relation("AuditActor")
   payments               Payment[]     @relation("ClientPayments")
+  pushDevices            PushDevice[]
+  notifications          Notification[]
 }
 
 model DoctorProfile {
@@ -198,6 +219,7 @@ model DoctorWorkingHour {
   doctor      DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
 
   @@index([doctorId, dayOfWeek, isActive])
+  @@index([availableDate, isActive, doctorId])
 }
 
 model DoctorBlockedSlot {
@@ -235,9 +257,70 @@ model Booking {
   payment               Payment?      @relation(fields: [paymentId], references: [id])
   earning               Earning?
   confirmationEmails    BookingEmail[]
+  videoCall             VideoCall?
 
   @@index([doctorId, startTime])
   @@index([clientId, startTime])
+}
+
+model PushDevice {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  token      String   @unique @db.VarChar(300)
+  platform   PushPlatform
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries PushDelivery[]
+
+  @@index([userId, isActive])
+}
+
+model Notification {
+  id         String           @id @default(uuid()) @db.Uuid
+  userId     String           @db.Uuid
+  type       NotificationType
+  title      String           @db.VarChar(120)
+  body       String           @db.VarChar(300)
+  data       Json
+  readAt     DateTime?        @db.Timestamptz(3)
+  createdAt  DateTime         @default(now()) @db.Timestamptz(3)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries PushDelivery[]
+
+  @@index([userId, readAt, createdAt])
+}
+
+model PushDelivery {
+  id             String       @id @default(uuid()) @db.Uuid
+  notificationId String       @db.Uuid
+  deviceId       String       @db.Uuid
+  attempts       Int          @default(0)
+  nextAttemptAt  DateTime     @default(now()) @db.Timestamptz(3)
+  sentAt         DateTime?    @db.Timestamptz(3)
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  device         PushDevice   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, deviceId])
+  @@index([sentAt, nextAttemptAt])
+}
+
+model VideoCall {
+  id               String         @id @default(uuid()) @db.Uuid
+  bookingId        String         @unique @db.Uuid
+  serviceSessionId String?        @unique @db.VarChar(128)
+  opensAt          DateTime       @db.Timestamptz(3)
+  closesAt         DateTime       @db.Timestamptz(3)
+  state            VideoCallState @default(PENDING)
+  attempts         Int            @default(0)
+  nextAttemptAt    DateTime       @default(now()) @db.Timestamptz(3)
+  lastErrorCode    String?        @db.VarChar(80)
+  createdAt        DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime       @updatedAt @db.Timestamptz(3)
+  booking          Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([state, nextAttemptAt])
 }
 
 model DoctorPhoto {

@@ -1,5 +1,4 @@
 import { prisma } from '../lib/prisma.js';
-import { Prisma } from '@prisma/client';
 import { AppError } from '../errors/AppError.js';
 import { recordAudit } from './audit.service.js';
 import { profileCompletion } from './eligibility.service.js';
@@ -36,7 +35,7 @@ export async function listDoctors({ page, limit, search }) {
   const terms = (search ?? '').trim().split(/\s+/).filter(Boolean);
   // A DoctorProfile is not itself authorization proof. Keep the directory scoped
   // to active doctor-role accounts as well as verified professional profiles.
-  /** @type {Prisma.DoctorProfileWhereInput} */
+  /** @type {import('@prisma/client').Prisma.DoctorProfileWhereInput} */
   const where = {
     verificationStatus: 'VERIFIED',
     user: { is: { role: 'DOCTOR', accountStatus: 'ACTIVE' } },
