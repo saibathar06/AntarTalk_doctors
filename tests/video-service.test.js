@@ -5,7 +5,7 @@ vi.mock('../src/config/env.js', () => ({ env: {
 } }));
 vi.mock('../src/lib/prisma.js', () => ({ prisma: { booking: { findUnique: vi.fn() }, videoCall: { update: vi.fn() } } }));
 import { prisma } from '../src/lib/prisma.js';
-import { createVideoTicket, provisionVideoCall } from '../src/services/video.service.js';
+import { createVideoTicket, provisionVideoCall, readVideoAttendance } from '../src/services/video.service.js';
 
 const booking = {
   id: 'booking', clientId: 'client-user', status: 'CONFIRMED', startTime: new Date('2030-01-02T04:30:00Z'),
@@ -52,5 +52,22 @@ describe('trusted video integration', () => {
     await provisionVideoCall('booking');
     const [, request] = globalThis.fetch.mock.calls[0];
     expect(JSON.parse(request.body)).toMatchObject({ appointmentId: 'booking', doctorId: 'doctor-user', clientId: 'client-user' });
+  });
+
+  it('reads only trusted attendance summaries from the video service', async () => {
+    globalThis.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ attendance: {
+      doctor: { firstJoinedAt: '2030-01-02T04:30:00Z' },
+      client: { firstJoinedAt: '2030-01-02T04:31:00Z' }, overlapSeconds: 120
+    } }) });
+    await expect(readVideoAttendance('video-session')).resolves.toMatchObject({ concurrentSeconds: 120 });
+    expect(globalThis.fetch.mock.calls[0][1]).toMatchObject({ method: 'GET' });
+  });
+
+  it('returns safe upstream diagnostics without exposing credentials', async () => {
+    prisma.booking.findUnique.mockResolvedValue({ ...structuredClone(booking), videoCall: { ...booking.videoCall, state: 'PENDING', serviceSessionId: null } });
+    globalThis.fetch.mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({ code: 'UNAUTHORIZED' }) });
+    await expect(provisionVideoCall('booking')).rejects.toMatchObject({
+      code: 'VIDEO_SERVICE_REJECTED', details: { upstreamStatus: 401, upstreamCode: 'UNAUTHORIZED' }
+    });
   });
 });

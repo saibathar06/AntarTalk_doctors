@@ -350,11 +350,16 @@ model VideoCall {
   attempts         Int            @default(0)
   nextAttemptAt    DateTime       @default(now()) @db.Timestamptz(3)
   lastErrorCode    String?        @db.VarChar(80)
+  doctorJoinedAt   DateTime?      @db.Timestamptz(3)
+  clientJoinedAt   DateTime?      @db.Timestamptz(3)
+  concurrentSeconds Int           @default(0)
+  attendanceFinalizedAt DateTime? @db.Timestamptz(3)
   createdAt        DateTime       @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime       @updatedAt @db.Timestamptz(3)
   booking          Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@index([state, nextAttemptAt])
+  @@index([attendanceFinalizedAt, closesAt])
 }
 
 model DoctorPhoto {

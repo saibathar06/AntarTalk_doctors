@@ -4,7 +4,8 @@ import { Prisma } from '@prisma/client';
 vi.mock('../src/config/env.js', () => ({ env: {
   DOCTOR_SAME_DAY_CANCELLATION_PENALTY_PERCENT: 5,
   BOOKING_TRANSACTION_TIMEOUT_MS: 15_000,
-  JOIN_EARLY_MINUTES: 10
+  JOIN_EARLY_MINUTES: 10,
+  LOG_LEVEL: 'silent'
 } }));
 vi.mock('../src/lib/prisma.js', () => ({ prisma: {} }));
 vi.mock('../src/services/transaction.service.js', async () => {
@@ -18,15 +19,23 @@ vi.mock('../src/services/transaction.service.js', async () => {
 vi.mock('../src/services/slot.service.js', () => ({ assertStructurallyBookable: vi.fn() }));
 vi.mock('../src/services/bookingEvent.service.js', () => ({ enqueueBookingEvent: vi.fn() }));
 vi.mock('../src/services/audit.service.js', () => ({ recordAudit: vi.fn() }));
-vi.mock('../src/services/video.service.js', () => ({ endVideoCall: vi.fn(async () => undefined) }));
+vi.mock('../src/services/video.service.js', () => ({
+  endVideoCall: vi.fn(async () => undefined),
+  readVideoAttendance: vi.fn(async () => ({
+    doctorJoinedAt: new Date('2030-01-08T10:00:00Z'),
+    clientJoinedAt: new Date('2030-01-08T10:00:01Z'),
+    concurrentSeconds: 2399
+  }))
+}));
 
 import { prisma } from '../src/lib/prisma.js';
 import { enqueueBookingEvent } from '../src/services/bookingEvent.service.js';
 import { assertStructurallyBookable } from '../src/services/slot.service.js';
+import { readVideoAttendance } from '../src/services/video.service.js';
 import {
   cancelClientSession,
   cancelDoctorSession,
-  completeDoctorSession,
+  processAutomaticSessionCompletion,
   requestClientReschedule,
   respondToReschedule,
   rescheduleDoctorSession
@@ -40,7 +49,8 @@ const baseBooking = () => ({
   status: 'CONFIRMED', rescheduleCount: 0, refund: null, penalty: null,
   doctor: { id: 'doctor', userId: 'doctor-user', firstName: 'Test', lastName: 'Doctor', timezone: 'Asia/Kolkata' },
   payment: { id: 'payment', status: 'SUCCEEDED', provider: 'RAZORPAY', providerPaymentId: 'pay_one', amount: amount(700), doctorEarning: amount(560), currency: 'INR' },
-  videoCall: { opensAt: new Date('2030-01-08T09:50:00Z') }, rescheduleRequests: []
+  videoCall: { id: 'video', serviceSessionId: 'service-session', state: 'SCHEDULED', opensAt: new Date('2030-01-08T09:50:00Z'),
+    closesAt: new Date('2030-01-08T10:40:00Z'), attendanceFinalizedAt: null, doctorJoinedAt: null, clientJoinedAt: null, concurrentSeconds: 0 }, rescheduleRequests: []
 });
 
 let booking;
@@ -61,7 +71,10 @@ beforeEach(() => {
       create: vi.fn(async ({ data }) => ({ id: 'request', status: 'PENDING', ...data })),
       findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn()
     },
-    videoCall: { update: vi.fn() },
+    videoCall: {
+      findMany: vi.fn(async () => [{ id: 'video', bookingId: 'booking', serviceSessionId: 'service-session' }]),
+      update: vi.fn(async ({ data }) => { booking.videoCall = { ...booking.videoCall, ...data }; return booking.videoCall; })
+    },
     refundTransaction: { upsert: vi.fn(async ({ create }) => ({ id: 'refund', status: 'PENDING', ...create })) },
     doctorPenalty: { upsert: vi.fn(async ({ create }) => ({ id: 'penalty', ...create })) }
   });
@@ -71,16 +84,21 @@ beforeEach(() => {
 });
 
 describe('booking lifecycle financial and reschedule boundaries', () => {
-  it('credits earnings only after the scheduled therapy period ends', async () => {
-    await expect(completeDoctorSession('doctor-user', 'doctor', 'booking', { now: new Date('2030-01-08T10:39:59Z') }))
-      .rejects.toMatchObject({ code: 'SESSION_STILL_IN_PROGRESS' });
-    expect(prisma.earning.upsert).not.toHaveBeenCalled();
-
-    await completeDoctorSession('doctor-user', 'doctor', 'booking', { now: new Date('2030-01-08T10:40:00Z') });
+  it('credits earnings automatically only from trusted two-party video attendance', async () => {
+    await processAutomaticSessionCompletion(prisma, new Date('2030-01-08T10:40:00Z'));
     expect(prisma.booking.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) }));
     expect(prisma.earning.upsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { bookingId: 'booking' }, create: expect.objectContaining({ amount: amount(560), status: 'AVAILABLE' })
     }));
+  });
+
+  it('does not credit an earning when only the doctor joined', async () => {
+    readVideoAttendance.mockResolvedValueOnce({
+      doctorJoinedAt: new Date('2030-01-08T10:00:00Z'), clientJoinedAt: null, concurrentSeconds: 0
+    });
+    await processAutomaticSessionCompletion(prisma, new Date('2030-01-08T10:40:00Z'));
+    expect(prisma.earning.upsert).not.toHaveBeenCalled();
+    expect(booking.status).toBe('CONFIRMED');
   });
 
   it('charges a client cancellation without creating a refund or doctor penalty', async () => {

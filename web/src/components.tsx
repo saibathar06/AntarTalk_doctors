@@ -290,7 +290,6 @@ function AppointmentActions({ appointment, onChanged }: { appointment: Appointme
       </div>
     </div>}
     <div className="inline-actions">
-      {appointment.join.state === "ENDED" && <button className="button small" disabled={busy} onClick={() => void act(`/api/doctor/sessions/${appointment.id}/complete`)}>Mark completed &amp; credit earning</button>}
       {(new Date(appointment.startTime) > new Date() || appointment.join.state === "ENDED") && <>
         <details>
           <summary className="button secondary small"><CalendarDotsIcon /> Reschedule</summary>
@@ -299,7 +298,7 @@ function AppointmentActions({ appointment, onChanged }: { appointment: Appointme
             <button className="button small" disabled={busy || !newTime}>Move appointment</button>
           </form>
         </details>
-        <button className="button danger small" disabled={busy} onClick={() => void cancel()}>Cancel appointment</button>
+        {new Date(appointment.startTime) > new Date() && <button className="button danger small" disabled={busy} onClick={() => void cancel()}>Cancel appointment</button>}
       </>}
     </div>
     {message && <p className="action-message" role="status">{message}</p>}

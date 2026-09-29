@@ -10,21 +10,24 @@ function configuration() {
   return { origin: new URL(env.VIDEO_SERVICE_URL).origin, apiKey: env.VIDEO_SERVICE_API_KEY };
 }
 
-async function videoRequest(path, body) {
+async function videoRequest(path, body, method = 'POST') {
   const { origin, apiKey } = configuration();
   const controller = new AbortController();
   const timeout = globalThis.setTimeout(() => controller.abort(), env.VIDEO_REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(new URL(path, `${origin}/`), {
-      method: 'POST',
+      method,
       signal: controller.signal,
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(body)
+      ...(body === undefined ? {} : { body: JSON.stringify(body) })
     });
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
       logger.warn({ status: response.status, path, providerCode: payload?.code ?? 'UNKNOWN' }, 'Video service request rejected');
-      throw new AppError(502, 'VIDEO_SERVICE_UNAVAILABLE', 'Video calling is temporarily unavailable.');
+      throw new AppError(502, 'VIDEO_SERVICE_REJECTED', 'Video calling is temporarily unavailable.', {
+        upstreamStatus: response.status,
+        upstreamCode: typeof payload?.code === 'string' ? payload.code : 'UNKNOWN'
+      });
     }
     return payload;
   } catch (error) {
@@ -34,6 +37,19 @@ async function videoRequest(path, body) {
   } finally {
     globalThis.clearTimeout(timeout);
   }
+}
+
+export async function readVideoAttendance(serviceSessionId) {
+  const payload = await videoRequest(`/v1/sessions/${encodeURIComponent(serviceSessionId)}`, undefined, 'GET');
+  const attendance = payload?.attendance;
+  if (!attendance || typeof attendance.overlapSeconds !== 'number') {
+    throw new AppError(502, 'VIDEO_SERVICE_INVALID_RESPONSE', 'Video attendance is temporarily unavailable.');
+  }
+  return {
+    doctorJoinedAt: attendance.doctor?.firstJoinedAt ? new Date(attendance.doctor.firstJoinedAt) : null,
+    clientJoinedAt: attendance.client?.firstJoinedAt ? new Date(attendance.client.firstJoinedAt) : null,
+    concurrentSeconds: Math.max(0, Math.floor(attendance.overlapSeconds))
+  };
 }
 
 async function bookingForVideo(bookingId, db = prisma) {
@@ -130,11 +146,18 @@ export async function processVideoProvisioning(db = prisma) {
     try {
       await provisionVideoCall(job.bookingId, db);
     } catch (error) {
+      const upstreamStatus = Number.isInteger(error?.details?.upstreamStatus) ? error.details.upstreamStatus : null;
+      const upstreamCode = typeof error?.details?.upstreamCode === 'string'
+        ? error.details.upstreamCode.replace(/[^A-Z0-9_]/gi, '_').slice(0, 32)
+        : null;
+      const persistedErrorCode = upstreamStatus
+        ? `VIDEO_HTTP_${upstreamStatus}_${upstreamCode || 'UNKNOWN'}`.slice(0, 80)
+        : error?.code ?? 'VIDEO_SERVICE_UNAVAILABLE';
       await db.videoCall.update({
         where: { id: job.id },
-        data: { state: 'FAILED', lastErrorCode: error.code ?? 'VIDEO_SERVICE_UNAVAILABLE', nextAttemptAt: new Date(Date.now() + Math.min(3_600_000, 30_000 * 2 ** job.attempts)) }
+        data: { state: 'FAILED', lastErrorCode: persistedErrorCode, nextAttemptAt: new Date(Date.now() + Math.min(3_600_000, 30_000 * 2 ** job.attempts)) }
       });
-      logger.warn({ videoCallId: job.id, attempt: job.attempts + 1, errorCode: error.code ?? 'VIDEO_ERROR' }, 'Video session provisioning failed');
+      logger.warn({ videoCallId: job.id, attempt: job.attempts + 1, errorCode: persistedErrorCode }, 'Video session provisioning failed');
     }
   }
 }

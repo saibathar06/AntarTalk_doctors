@@ -2,11 +2,12 @@ import { DateTime } from 'luxon';
 import { env } from '../config/env.js';
 import { AppError } from '../errors/AppError.js';
 import { prisma } from '../lib/prisma.js';
+import { logger } from '../lib/logger.js';
 import { recordAudit } from './audit.service.js';
 import { enqueueBookingEvent } from './bookingEvent.service.js';
 import { assertStructurallyBookable } from './slot.service.js';
 import { lockDoctor, lockUser, serialTransaction } from './transaction.service.js';
-import { endVideoCall } from './video.service.js';
+import { endVideoCall, readVideoAttendance } from './video.service.js';
 
 const doctorSelect = { id: true, userId: true, firstName: true, lastName: true, timezone: true };
 /** @type {import('@prisma/client').Prisma.BookingInclude} */
@@ -49,31 +50,52 @@ function jsonSafe(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-export async function completeDoctorSession(userId, doctorId, bookingId, context = {}) {
-  const now = contextNow(context);
-  const result = await serialTransaction(async (tx) => {
-    await lockUser(tx, userId);
-    await lockDoctor(tx, doctorId);
+async function settleAttendedSession(bookingId, now = new Date()) {
+  return serialTransaction(async (tx) => {
+    const initial = await tx.booking.findUnique({ where: { id: bookingId }, select: { doctorId: true } });
+    if (!initial) return null;
+    await lockDoctor(tx, initial.doctorId);
     const booking = await lockBooking(tx, bookingId);
-    if (booking.doctorId !== doctorId) throw new AppError(404, 'SESSION_NOT_FOUND', 'Session not found.');
-    if (booking.status === 'COMPLETED') return tx.booking.findUnique({ where: { id: booking.id }, include: { earning: true } });
-    if (booking.status !== 'CONFIRMED') throw new AppError(409, 'SESSION_NOT_COMPLETABLE', 'Only a confirmed session can be completed.');
+    if (booking.status === 'COMPLETED') return booking;
+    if (booking.status !== 'CONFIRMED' || !booking.videoCall?.attendanceFinalizedAt ||
+        !booking.videoCall.doctorJoinedAt || !booking.videoCall.clientJoinedAt || booking.videoCall.concurrentSeconds < 1) return null;
     const therapyEnd = new Date(booking.startTime.getTime() + booking.sessionDurationMinutes * 60_000);
-    if (now < therapyEnd) throw new AppError(409, 'SESSION_STILL_IN_PROGRESS', 'Complete the session after its scheduled therapy time ends.');
-    if (booking.payment?.status !== 'SUCCEEDED' || !booking.payment.doctorEarning?.greaterThan(0)) {
-      throw new AppError(409, 'EARNING_NOT_SETTLEABLE', 'A verified successful payment is required before this session can be completed.');
-    }
+    if (now < therapyEnd || booking.payment?.status !== 'SUCCEEDED' || !booking.payment.doctorEarning?.greaterThan(0)) return null;
     await tx.booking.update({ where: { id: booking.id }, data: { status: 'COMPLETED', completedAt: now } });
     const earning = await tx.earning.upsert({
       where: { bookingId: booking.id },
-      create: { doctorId, bookingId: booking.id, amount: booking.payment.doctorEarning, currency: booking.payment.currency, status: 'AVAILABLE' },
+      create: { doctorId: booking.doctorId, bookingId: booking.id, amount: booking.payment.doctorEarning, currency: booking.payment.currency, status: 'AVAILABLE' },
       update: {}
     });
-    await recordAudit({ actorId: userId, action: 'SESSION_COMPLETED', entityType: 'Booking', entityId: booking.id, metadata: { earningId: earning.id }, ipAddress: contextIp(context) }, tx);
+    await recordAudit({ action: 'SESSION_AUTO_COMPLETED', entityType: 'Booking', entityId: booking.id,
+      metadata: { earningId: earning.id, concurrentSeconds: booking.videoCall.concurrentSeconds } }, tx);
     return tx.booking.findUnique({ where: { id: booking.id }, include: { earning: true } });
   });
-  await endVideoCall(bookingId, 'ended').catch(() => {});
-  return jsonSafe(result);
+}
+
+export async function processAutomaticSessionCompletion(db = prisma, now = new Date()) {
+  const calls = await db.videoCall.findMany({
+    where: {
+      attendanceFinalizedAt: null,
+      serviceSessionId: { not: null },
+      closesAt: { lte: now },
+      state: { in: ['SCHEDULED', 'ENDED'] },
+      booking: { status: 'CONFIRMED' }
+    },
+    select: { id: true, bookingId: true, serviceSessionId: true },
+    take: 25,
+    orderBy: { closesAt: 'asc' }
+  });
+  for (const call of calls) {
+    try {
+      const attendance = await readVideoAttendance(call.serviceSessionId);
+      await db.videoCall.update({ where: { id: call.id }, data: { ...attendance, attendanceFinalizedAt: now } });
+      await settleAttendedSession(call.bookingId, now);
+      await endVideoCall(call.bookingId, 'ended', db).catch(() => {});
+    } catch (error) {
+      logger.warn({ videoCallId: call.id, errorCode: error.code ?? 'VIDEO_ATTENDANCE_ERROR' }, 'Video attendance finalization failed');
+    }
+  }
 }
 
 async function cancelSession({ actor, userId, doctorId, bookingId, reason, context = {} }) {

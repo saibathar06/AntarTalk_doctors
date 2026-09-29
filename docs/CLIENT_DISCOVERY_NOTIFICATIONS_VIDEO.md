@@ -24,7 +24,7 @@ Continue through the existing flow:
 | Doctor | `POST /api/doctor/reschedule-requests/:id/respond` | Approves or rejects a pending client proposal; approval rechecks availability transactionally |
 | Doctor | `POST /api/doctor/sessions/:bookingId/reschedule` | Directly moves the appointment after the same availability checks |
 | Doctor | `POST /api/doctor/sessions/:bookingId/cancel` | Cancels and queues a full Razorpay refund; same-day cancellation records the configured adjustment |
-| Doctor | `POST /api/doctor/sessions/:bookingId/complete` | After the therapy period, marks the session completed and atomically creates the available earning |
+| System | Trusted video attendance finalizer | After the therapy period, records server-observed attendance and credits the earning only when both assigned participants joined the call concurrently |
 
 A booking can be successfully rescheduled once. Cancellation and rescheduling are unavailable after the session starts; rescheduling also closes when the video join window opens. Lifecycle emails are always queued. In-app notifications are always stored, and mobile push deliveries are queued only for active registered devices.
 
@@ -54,9 +54,11 @@ On booking confirmation, the API creates a durable `VideoCall` row. A worker pro
 | Doctor | POST `/api/doctor/sessions/:bookingId/join` | `{surface: "WEB" | "MOBILE"}` |
 | Client | POST `/api/bookings/:bookingId/join` | `{surface: "WEB" | "MOBILE"}` |
 
-Only the booking's doctor or client can request a ticket. The booking must be `CONFIRMED`, and requests are allowed from `JOIN_EARLY_MINUTES` before start until the 40-minute therapy period ends. The 20-minute buffer is never joinable. For `WEB`, the trusted parent origin is selected server-side; callers cannot inject it. For `MOBILE`, the React Native WebView receives the returned `launchUrl` and should restrict navigation to the returned `videoOrigin` and `/call`.
+Only the booking's doctor or client can request a ticket. The booking must be `CONFIRMED`, and requests are allowed from `JOIN_EARLY_MINUTES` before start until the therapy period ends. For `WEB`, the trusted parent origin is selected server-side; callers cannot inject it. For `MOBILE`, the React Native WebView receives the returned `launchUrl` and should restrict navigation to the returned `videoOrigin` and `/call`.
 
-Required production rollout: apply migrations through `20260930010000_booking_lifecycle`, deploy the video ZIP as a separate HTTPS service, set its private API key on both services, then set the exact web origins. Without video configuration booking still works; join returns `503 VIDEO_NOT_CONFIGURED` and the provisioning worker remains idle.
+The video service persistently records trusted doctor/client signaling joins and concurrent connection time. After the call window closes, the API retrieves that record using service authentication. A booking becomes `COMPLETED` and its earning becomes available only when both assigned participants have joined with a positive concurrent duration. Doctors cannot manually mark sessions completed.
+
+Required production rollout: apply migrations through `20260930030000_trusted_video_attendance`, deploy the updated video service as a separate HTTPS service, set its private API key on both services, then set the exact web origins. Without video configuration booking still works; join returns `503 VIDEO_NOT_CONFIGURED` and the provisioning worker remains idle.
 
 For a deployed call service, the following values must agree exactly:
 
