@@ -5,6 +5,7 @@ vi.mock('../src/config/env.js', () => ({ env: {
   DOCTOR_SAME_DAY_CANCELLATION_PENALTY_PERCENT: 5,
   BOOKING_TRANSACTION_TIMEOUT_MS: 15_000,
   JOIN_EARLY_MINUTES: 10,
+  MIN_SESSION_ATTENDANCE_MINUTES: 5,
   LOG_LEVEL: 'silent'
 } }));
 vi.mock('../src/lib/prisma.js', () => ({ prisma: {} }));
@@ -24,7 +25,7 @@ vi.mock('../src/services/video.service.js', () => ({
   readVideoAttendance: vi.fn(async () => ({
     doctorJoinedAt: new Date('2030-01-08T10:00:00Z'),
     clientJoinedAt: new Date('2030-01-08T10:00:01Z'),
-    concurrentSeconds: 2399
+    concurrentSeconds: 300
   }))
 }));
 
@@ -84,7 +85,7 @@ beforeEach(() => {
 });
 
 describe('booking lifecycle financial and reschedule boundaries', () => {
-  it('credits earnings automatically only from trusted two-party video attendance', async () => {
+  it('completes and credits when both participants overlap for at least five minutes', async () => {
     await processAutomaticSessionCompletion(prisma, new Date('2030-01-08T10:40:00Z'));
     expect(prisma.booking.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'COMPLETED' }) }));
     expect(prisma.earning.upsert).toHaveBeenCalledWith(expect.objectContaining({
@@ -92,13 +93,32 @@ describe('booking lifecycle financial and reschedule boundaries', () => {
     }));
   });
 
-  it('does not credit an earning when only the doctor joined', async () => {
+  it.each([
+    ['only the doctor joined', { doctorJoinedAt: new Date('2030-01-08T10:00:00Z'), clientJoinedAt: null, concurrentSeconds: 0 }],
+    ['neither participant joined', { doctorJoinedAt: null, clientJoinedAt: null, concurrentSeconds: 0 }]
+  ])('does not complete or credit when %s', async (_case, attendance) => {
+    readVideoAttendance.mockResolvedValueOnce(attendance);
+    await processAutomaticSessionCompletion(prisma, new Date('2030-01-08T10:40:00Z'));
+    expect(prisma.earning.upsert).not.toHaveBeenCalled();
+    expect(booking.status).toBe('CONFIRMED');
+  });
+
+  it('does not complete or credit when concurrent attendance is shorter than five minutes', async () => {
     readVideoAttendance.mockResolvedValueOnce({
-      doctorJoinedAt: new Date('2030-01-08T10:00:00Z'), clientJoinedAt: null, concurrentSeconds: 0
+      doctorJoinedAt: new Date('2030-01-08T10:00:00Z'),
+      clientJoinedAt: new Date('2030-01-08T10:00:01Z'),
+      concurrentSeconds: 299
     });
     await processAutomaticSessionCompletion(prisma, new Date('2030-01-08T10:40:00Z'));
     expect(prisma.earning.upsert).not.toHaveBeenCalled();
     expect(booking.status).toBe('CONFIRMED');
+  });
+
+  it('does not create a duplicate credit when completion is processed again', async () => {
+    await processAutomaticSessionCompletion(prisma, new Date('2030-01-08T10:40:00Z'));
+    await processAutomaticSessionCompletion(prisma, new Date('2030-01-08T10:40:01Z'));
+    expect(prisma.earning.upsert).toHaveBeenCalledTimes(1);
+    expect(booking.status).toBe('COMPLETED');
   });
 
   it('charges a client cancellation without creating a refund or doctor penalty', async () => {

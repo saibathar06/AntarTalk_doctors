@@ -56,7 +56,7 @@ On booking confirmation, the API creates a durable `VideoCall` row. A worker pro
 
 Only the booking's doctor or client can request a ticket. The booking must be `CONFIRMED`, and requests are allowed from `JOIN_EARLY_MINUTES` before start until the therapy period ends. For `WEB`, the trusted parent origin is selected server-side; callers cannot inject it. For `MOBILE`, the React Native WebView receives the returned `launchUrl` and should restrict navigation to the returned `videoOrigin` and `/call`.
 
-The video service persistently records trusted doctor/client signaling joins and concurrent connection time. After the call window closes, the API retrieves that record using service authentication. A booking becomes `COMPLETED` and its earning becomes available only when both assigned participants have joined with a positive concurrent duration. Doctors cannot manually mark sessions completed.
+The video service persistently records trusted doctor/client signaling joins and concurrent connection time. After the call window closes, the API retrieves that record using service authentication. A booking becomes `COMPLETED` and its earning becomes available only when both assigned participants have joined and overlapped for at least `MIN_SESSION_ATTENDANCE_MINUTES` (five minutes by default). Doctors cannot manually mark sessions completed.
 
 Required production rollout: apply migrations through `20260930030000_trusted_video_attendance`, deploy the updated video service as a separate HTTPS service, set its private API key on both services, then set the exact web origins. Without video configuration booking still works; join returns `503 VIDEO_NOT_CONFIGURED` and the provisioning worker remains idle.
 

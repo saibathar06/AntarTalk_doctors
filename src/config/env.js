@@ -39,6 +39,7 @@ const schema = z.object({
   SESSION_DURATION_MINUTES: z.coerce.number().int().positive().default(40),
   BUFFER_DURATION_MINUTES: z.coerce.number().int().nonnegative().default(20),
   SLOT_INTERVAL_MINUTES: z.coerce.number().int().positive().default(60),
+  MIN_SESSION_ATTENDANCE_MINUTES: z.coerce.number().int().min(1).max(60).default(5),
   CORS_ORIGINS: z.string().default('http://localhost:5173,http://localhost:4000,http://localhost:3000,http://localhost:8081'),
   LOG_LEVEL: z.string().default('info'),
   SMTP_HOST: z.string().trim().min(1).default('localhost'),

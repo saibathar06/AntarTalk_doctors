@@ -56,6 +56,7 @@ RAZORPAY_KEY_SECRET=your-razorpay-test-key-secret
 RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
 RAZORPAY_CURRENCY=INR
 PLATFORM_COMMISSION_PERCENT=20
+MIN_SESSION_ATTENDANCE_MINUTES=5
 DOCTOR_SAME_DAY_CANCELLATION_PENALTY_PERCENT=5
 BOOKING_TRANSACTION_TIMEOUT_MS=20000
 ```
@@ -64,7 +65,7 @@ CAPTCHA is currently removed. Password validation, email OTP, resend cooldowns a
 
 Razorpay orders are created by the API from the doctor’s stored `consultationFee`; clients never submit an amount or commission. The server verifies the returned checkout signature and captured payment before confirming the booking. Normal confirmation requires the existing Redis hold. If the hold expires after Razorpay captures payment, the trusted provider-confirmation path may recover the booking from the payment's server-bound client, doctor and UTC slot data; PostgreSQL overlap constraints remain authoritative. `BOOKING_TRANSACTION_TIMEOUT_MS` bounds the serializable confirmation transaction and defaults to 20 seconds. Configure a Razorpay webhook at `POST /api/payments/razorpay/webhook` with the same webhook secret and subscribe to `payment.captured` and `refund.processed`. The webhook never creates a booking by itself.
 
-Doctors explicitly complete a session after its scheduled therapy time; only that trusted transition creates an available earning. Client cancellation retains the charge and creates no refund. Doctor cancellation creates a durable full-refund job; a same-day cancellation also records a 5% adjustment against future available earnings. Refunds are retried and reconciled with Razorpay. A client reschedule request leaves the original appointment unchanged until its doctor approves it; doctors may move an appointment directly, and each booking can be successfully rescheduled only once. All lifecycle changes queue email and in-app/mobile push notifications.
+After the therapy window, trusted video attendance automatically completes a session only when both assigned participants overlapped for the configured minimum attendance duration. Only that transition creates an available earning. Client cancellation retains the charge and creates no refund. Doctor cancellation creates a durable full-refund job; a same-day cancellation also records a 5% adjustment against future available earnings. Refunds are retried and reconciled with Razorpay. A client reschedule request leaves the original appointment unchanged until its doctor approves it; doctors may move an appointment directly, and each booking can be successfully rescheduled only once. All lifecycle changes queue email and in-app/mobile push notifications.
 
 ## How it works
 

@@ -50,15 +50,17 @@ function jsonSafe(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-async function settleAttendedSession(bookingId, now = new Date()) {
+async function finalizeSessionAttendance(bookingId, attendance, now = new Date()) {
   return serialTransaction(async (tx) => {
     const initial = await tx.booking.findUnique({ where: { id: bookingId }, select: { doctorId: true } });
     if (!initial) return null;
     await lockDoctor(tx, initial.doctorId);
     const booking = await lockBooking(tx, bookingId);
     if (booking.status === 'COMPLETED') return booking;
-    if (booking.status !== 'CONFIRMED' || !booking.videoCall?.attendanceFinalizedAt ||
-        !booking.videoCall.doctorJoinedAt || !booking.videoCall.clientJoinedAt || booking.videoCall.concurrentSeconds < 1) return null;
+    if (booking.status !== 'CONFIRMED' || !booking.videoCall) return null;
+    await tx.videoCall.update({ where: { bookingId }, data: { ...attendance, attendanceFinalizedAt: now } });
+    const minimumConcurrentSeconds = env.MIN_SESSION_ATTENDANCE_MINUTES * 60;
+    if (!attendance.doctorJoinedAt || !attendance.clientJoinedAt || attendance.concurrentSeconds < minimumConcurrentSeconds) return null;
     const therapyEnd = new Date(booking.startTime.getTime() + booking.sessionDurationMinutes * 60_000);
     if (now < therapyEnd || booking.payment?.status !== 'SUCCEEDED' || !booking.payment.doctorEarning?.greaterThan(0)) return null;
     await tx.booking.update({ where: { id: booking.id }, data: { status: 'COMPLETED', completedAt: now } });
@@ -68,7 +70,7 @@ async function settleAttendedSession(bookingId, now = new Date()) {
       update: {}
     });
     await recordAudit({ action: 'SESSION_AUTO_COMPLETED', entityType: 'Booking', entityId: booking.id,
-      metadata: { earningId: earning.id, concurrentSeconds: booking.videoCall.concurrentSeconds } }, tx);
+      metadata: { earningId: earning.id, concurrentSeconds: attendance.concurrentSeconds } }, tx);
     return tx.booking.findUnique({ where: { id: booking.id }, include: { earning: true } });
   });
 }
@@ -89,8 +91,7 @@ export async function processAutomaticSessionCompletion(db = prisma, now = new D
   for (const call of calls) {
     try {
       const attendance = await readVideoAttendance(call.serviceSessionId);
-      await db.videoCall.update({ where: { id: call.id }, data: { ...attendance, attendanceFinalizedAt: now } });
-      await settleAttendedSession(call.bookingId, now);
+      await finalizeSessionAttendance(call.bookingId, attendance, now);
       await endVideoCall(call.bookingId, 'ended', db).catch(() => {});
     } catch (error) {
       logger.warn({ videoCallId: call.id, errorCode: error.code ?? 'VIDEO_ATTENDANCE_ERROR' }, 'Video attendance finalization failed');
