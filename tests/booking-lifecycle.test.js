@@ -28,7 +28,8 @@ import {
   cancelDoctorSession,
   completeDoctorSession,
   requestClientReschedule,
-  respondToReschedule
+  respondToReschedule,
+  rescheduleDoctorSession
 } from '../src/services/bookingLifecycle.service.js';
 
 const amount = (value) => new Prisma.Decimal(value);
@@ -106,6 +107,13 @@ describe('booking lifecycle financial and reschedule boundaries', () => {
     prisma.rescheduleRequest.findUnique.mockResolvedValue({ ...request, bookingId: 'booking' });
     prisma.rescheduleRequest.update.mockResolvedValue({ ...request, status: 'APPROVED' });
     await respondToReschedule('doctor-user', 'doctor', 'request', 'APPROVE', { now: new Date('2030-01-07T02:00:00Z') });
+    expect(booking.startTime).toEqual(proposed);
+    expect(booking.rescheduleCount).toBe(1);
+  });
+
+  it('allows a doctor to reschedule a missed confirmed session from appointments', async () => {
+    const proposed = new Date('2030-01-10T10:00:00Z');
+    await rescheduleDoctorSession('doctor-user', 'doctor', 'booking', { startTime: proposed }, { now: new Date('2030-01-08T11:01:00Z') });
     expect(booking.startTime).toEqual(proposed);
     expect(booking.rescheduleCount).toBe(1);
   });

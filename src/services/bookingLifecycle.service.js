@@ -33,10 +33,14 @@ async function lockBooking(tx, bookingId) {
   return booking;
 }
 
-function rescheduleWindow(booking, now) {
-  assertConfirmedFuture(booking, now);
+function rescheduleWindow(booking, now, { allowMissed = false } = {}) {
+  if (booking.status !== 'CONFIRMED') throw new AppError(409, 'SESSION_NOT_CHANGEABLE', 'Only a confirmed session can be changed.');
   if (booking.rescheduleCount >= 1) throw new AppError(409, 'RESCHEDULE_LIMIT_REACHED', 'This appointment has already been rescheduled once.');
+  const therapyEnd = new Date(booking.startTime.getTime() + booking.sessionDurationMinutes * 60_000);
+  const missed = allowMissed && now >= therapyEnd;
+  if (!missed && now >= booking.startTime) throw new AppError(409, 'SESSION_ALREADY_STARTED', 'This session has already started and can no longer be changed.');
   if (booking.videoCall && now >= booking.videoCall.opensAt) {
+    if (missed) return;
     throw new AppError(409, 'RESCHEDULE_WINDOW_CLOSED', 'This appointment is too close to its joining time to reschedule.');
   }
 }
@@ -165,9 +169,9 @@ export async function cancelClientReschedule(userId, bookingId, requestId, conte
   });
 }
 
-async function applyReschedule(tx, booking, startTime, actorId, action, context, requestId) {
+async function applyReschedule(tx, booking, startTime, actorId, action, context, requestId, options = {}) {
   const now = contextNow(context);
-  rescheduleWindow(booking, now);
+  rescheduleWindow(booking, now, options);
   if (booking.startTime.getTime() === startTime.getTime()) throw new AppError(422, 'SAME_APPOINTMENT_TIME', 'Choose a different appointment time.');
   const slot = await assertStructurallyBookable(booking.doctorId, startTime, tx, booking.id);
   const oldStartTime = booking.startTime.toISOString();
@@ -221,7 +225,7 @@ export async function rescheduleDoctorSession(userId, doctorId, bookingId, input
     await lockDoctor(tx, doctorId);
     const booking = await lockBooking(tx, bookingId);
     if (booking.doctorId !== doctorId) throw new AppError(404, 'SESSION_NOT_FOUND', 'Session not found.');
-    return applyReschedule(tx, booking, input.startTime, userId, 'DOCTOR_RESCHEDULED', context);
+    return applyReschedule(tx, booking, input.startTime, userId, 'DOCTOR_RESCHEDULED', context, undefined, { allowMissed: true });
   }, { timeout: env.BOOKING_TRANSACTION_TIMEOUT_MS, maxWait: 5000, retryOnTimeout: true });
 }
 

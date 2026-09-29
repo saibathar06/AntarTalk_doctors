@@ -123,7 +123,7 @@ export function DashboardPage() {
               </div>
               {resource.data.schedule.items.length ? (
                 resource.data.schedule.items.map((item) => (
-                  <AppointmentCard key={item.id} appointment={item} onChanged={resource.reload} />
+                  <AppointmentCard key={item.id} appointment={item} />
                 ))
               ) : (
                 <EmptyState title="Your day has room to breathe">
@@ -205,7 +205,7 @@ export function AppointmentsPage() {
             <>
               {resource.data.items.length ? (
                 resource.data.items.map((item) => (
-                  <AppointmentCard key={item.id} appointment={item} onChanged={resource.reload} />
+                  <AppointmentCard key={item.id} appointment={item} onChanged={resource.reload} showManagement />
                 ))
               ) : (
                 <EmptyState title="No appointments here yet" />
