@@ -22,7 +22,12 @@ import {
   XIcon,
 } from "@phosphor-icons/react";
 import { useAuth } from "./auth";
-import { DoctorAvatar, ErrorState, LoadingState, TransitionLoader } from "./components";
+import {
+  DoctorAvatar,
+  ErrorState,
+  LoadingState,
+  TransitionLoader,
+} from "./components";
 import { AuthPage } from "./pages/AuthPages";
 import {
   AppointmentsPage,
@@ -36,6 +41,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { AdminVerificationPage } from "./pages/AdminVerificationPage";
 import { BookSessionPage } from "./pages/BookSessionPage";
 import { ClientBookingsPage } from "./pages/ClientBookingsPage";
+import { ClientCallTestPage } from "./pages/ClientCallTestPage";
 
 const links = [
   ["dashboard", "Dashboard", HouseIcon],
@@ -57,7 +63,15 @@ function DoctorLayout() {
   if (viewer?.role === "ADMIN") return <Navigate to="/doctor/admin" replace />;
   if (!profile) return <Navigate to="/doctor/login" replace />;
   const verified = profile.verificationStatus === "VERIFIED";
-  if (!verified && !["/doctor", "/doctor/dashboard", "/doctor/profile", "/doctor/settings"].includes(location.pathname)) {
+  if (
+    !verified &&
+    ![
+      "/doctor",
+      "/doctor/dashboard",
+      "/doctor/profile",
+      "/doctor/settings",
+    ].includes(location.pathname)
+  ) {
     return <Navigate to="/doctor/dashboard" replace />;
   }
   async function signOut() {
@@ -97,16 +111,21 @@ function DoctorLayout() {
         </button>
         <p className="nav-label">YOUR WORKSPACE</p>
         <nav aria-label="Doctor navigation">
-          {links.filter(([path]) => verified || ["dashboard", "profile", "settings"].includes(path)).map(([path, label, Icon]) => (
-            <NavLink
-              key={path}
-              to={`/doctor/${path}`}
-              onClick={() => setOpen(false)}
-            >
-              <Icon size={21} />
-              {label}
-            </NavLink>
-          ))}
+          {links
+            .filter(
+              ([path]) =>
+                verified || ["dashboard", "profile", "settings"].includes(path),
+            )
+            .map(([path, label, Icon]) => (
+              <NavLink
+                key={path}
+                to={`/doctor/${path}`}
+                onClick={() => setOpen(false)}
+              >
+                <Icon size={21} />
+                {label}
+              </NavLink>
+            ))}
         </nav>
         <div className="sidebar-bottom">
           <div className="sidebar-note">
@@ -174,7 +193,8 @@ function AdminLayout() {
   const { viewer, loading } = useAuth();
   if (loading) return <LoadingState />;
   if (!viewer) return <Navigate to="/doctor/login" replace />;
-  if (viewer.role !== "ADMIN") return <Navigate to="/doctor/dashboard" replace />;
+  if (viewer.role !== "ADMIN")
+    return <Navigate to="/doctor/dashboard" replace />;
   return <AdminVerificationPage />;
 }
 export function App() {
@@ -182,16 +202,26 @@ export function App() {
     <Routes>
       <Route path="/book-session/:doctorId" element={<BookSessionPage />} />
       <Route path="/my-bookings" element={<ClientBookingsPage />} />
+      <Route path="/client-call/:bookingId?" element={<ClientCallTestPage />} />
       <Route path="/doctor/login" element={<AuthPage mode="login" />} />
       <Route path="/doctor/register" element={<AuthPage mode="register" />} />
       <Route path="/doctor/verify" element={<AuthPage mode="verify" />} />
-      <Route path="/doctor/forgot-password" element={<AuthPage mode="forgot" />} />
-      <Route path="/doctor/reset-password" element={<AuthPage mode="reset" />} />
+      <Route
+        path="/doctor/forgot-password"
+        element={<AuthPage mode="forgot" />}
+      />
+      <Route
+        path="/doctor/reset-password"
+        element={<AuthPage mode="reset" />}
+      />
       <Route path="/doctor/admin" element={<AdminLayout />} />
       <Route path="/doctor" element={<DoctorLayout />}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="schedule" element={<Navigate to="/doctor/appointments" replace />} />
+        <Route
+          path="schedule"
+          element={<Navigate to="/doctor/appointments" replace />}
+        />
         <Route path="appointments" element={<AppointmentsPage />} />
         <Route path="clients" element={<ClientsPage />} />
         <Route path="availability" element={<AvailabilityPage />} />

@@ -38,7 +38,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function reload() {
     const current = await api<Viewer>("/api/doctor/auth/me");
     setViewer(current);
-    setProfile(current.role === "DOCTOR" ? await api<Profile>("/api/doctor/profile") : null);
+    setProfile(
+      current.role === "DOCTOR"
+        ? await api<Profile>("/api/doctor/profile")
+        : null,
+    );
     return current;
   }
   async function signIn(token: string) {
@@ -57,7 +61,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Public client booking does not use the Doctors-app refresh cookie. It has
     // its own short-lived, in-memory client session inside the booking page.
-    if (window.location.pathname.startsWith("/book-session/")) {
+    if (
+      window.location.pathname.startsWith("/book-session/") ||
+      window.location.pathname === "/my-bookings" ||
+      window.location.pathname.startsWith("/client-call")
+    ) {
       setLoading(false);
       return;
     }
