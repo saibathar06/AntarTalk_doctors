@@ -151,6 +151,18 @@ export async function handleRazorpayWebhook(rawBody, signature) {
   if (!safeEqual(expected, signature)) throw new AppError(401, 'WEBHOOK_SIGNATURE_INVALID', 'Invalid webhook signature.');
   let event;
   try { event = JSON.parse(rawBody.toString('utf8')); } catch { throw new AppError(400, 'INVALID_JSON', 'Malformed webhook payload.'); }
+  if (event.event === 'refund.processed') {
+    const refund = event.payload?.refund?.entity;
+    if (refund?.id && refund?.payment_id) {
+      await prisma.$transaction(async (tx) => {
+        const record = await tx.refundTransaction.findFirst({ where: { payment: { providerPaymentId: refund.payment_id } }, include: { payment: true } });
+        if (!record || Number(refund.amount) !== toPaise(record.amount)) return;
+        await tx.refundTransaction.update({ where: { id: record.id }, data: { status: 'COMPLETED', providerReference: refund.id, completedAt: new Date(), lastErrorCode: null } });
+        await tx.payment.update({ where: { id: record.paymentId }, data: { status: 'REFUNDED' } });
+      });
+    }
+    return { received: true };
+  }
   if (event.event !== 'payment.captured') return { received: true };
   const entity = event.payload?.payment?.entity;
   if (!entity?.order_id || !entity?.id || entity.status !== 'captured') return { received: true };
@@ -159,4 +171,61 @@ export async function handleRazorpayWebhook(rawBody, signature) {
     data: { status: 'SUCCEEDED', providerPaymentId: entity.id, amount: moneyFromPaise(entity.amount) }
   });
   return { received: true };
+}
+
+async function completeRefund(recordId, paymentId, providerReference, db = prisma) {
+  await db.$transaction([
+    db.refundTransaction.update({ where: { id: recordId }, data: { status: 'COMPLETED', providerReference, completedAt: new Date(), lastErrorCode: null } }),
+    db.payment.update({ where: { id: paymentId }, data: { status: 'REFUNDED' } })
+  ]);
+}
+
+export async function processRazorpayRefunds(db = prisma) {
+  if (!env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) return;
+  const jobs = await db.refundTransaction.findMany({
+    where: { status: { in: ['PENDING', 'PROCESSING', 'FAILED'] }, attempts: { lt: 10 }, nextAttemptAt: { lte: new Date() } },
+    include: { payment: true }, take: 20, orderBy: { nextAttemptAt: 'asc' }
+  });
+  for (const job of jobs) {
+    const claimed = await db.refundTransaction.updateMany({
+      where: { id: job.id, status: job.status, attempts: job.attempts, nextAttemptAt: { lte: new Date() } },
+      data: { status: 'PROCESSING', attempts: { increment: 1 }, nextAttemptAt: new Date(Date.now() + 5 * 60_000) }
+    });
+    if (!claimed.count) continue;
+    try {
+      if (!job.payment.providerPaymentId || job.payment.provider !== 'RAZORPAY') throw new AppError(422, 'REFUND_PAYMENT_INVALID', 'The original payment cannot be refunded automatically.');
+      if (job.providerReference) {
+        const providerRefund = await razorpayRequest(`/refunds/${encodeURIComponent(job.providerReference)}`, { method: 'GET' });
+        if (providerRefund.status === 'processed') {
+          await completeRefund(job.id, job.paymentId, providerRefund.id, db);
+          continue;
+        }
+        if (providerRefund.status === 'failed') throw new AppError(502, 'REFUND_PROVIDER_FAILED', 'The payment provider rejected the refund.');
+        await db.refundTransaction.update({ where: { id: job.id }, data: { status: 'PROCESSING', nextAttemptAt: new Date(Date.now() + 60_000), lastErrorCode: null } });
+        continue;
+      }
+      // Reconcile before creating. This makes a retry safe if the previous HTTP
+      // response was lost after Razorpay accepted the refund.
+      const providerPayment = await razorpayRequest(`/payments/${encodeURIComponent(job.payment.providerPaymentId)}`, { method: 'GET' });
+      if (Number(providerPayment.amount_refunded ?? 0) >= toPaise(job.amount)) {
+        await completeRefund(job.id, job.paymentId, `reconciled_${job.payment.providerPaymentId}`, db);
+        continue;
+      }
+      const providerRefund = await razorpayRequest(`/payments/${encodeURIComponent(job.payment.providerPaymentId)}/refund`, {
+        method: 'POST',
+        body: JSON.stringify({ amount: toPaise(job.amount), notes: { antartalkBookingId: job.bookingId, antartalkRefundId: job.id } })
+      });
+      if (!providerRefund?.id || providerRefund.payment_id !== job.payment.providerPaymentId || Number(providerRefund.amount) !== toPaise(job.amount)) {
+        throw new AppError(502, 'REFUND_PROVIDER_INVALID_RESPONSE', 'The payment provider returned an invalid refund response.');
+      }
+      if (providerRefund.status === 'processed') await completeRefund(job.id, job.paymentId, providerRefund.id, db);
+      else await db.refundTransaction.update({ where: { id: job.id }, data: { status: 'PROCESSING', providerReference: providerRefund.id, nextAttemptAt: new Date(Date.now() + 60_000), lastErrorCode: null } });
+    } catch (error) {
+      await db.refundTransaction.update({ where: { id: job.id }, data: {
+        status: 'FAILED', lastErrorCode: error.code ?? 'REFUND_ERROR',
+        nextAttemptAt: new Date(Date.now() + Math.min(3_600_000, 30_000 * 2 ** job.attempts))
+      } });
+      logger.warn({ refundId: job.id, attempt: job.attempts + 1, errorCode: error.code ?? 'REFUND_ERROR' }, 'Razorpay refund attempt failed');
+    }
+  }
 }

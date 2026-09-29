@@ -255,6 +255,19 @@ small,
 .slot-grid button:hover { border-color: #66bcae; background: #f5fbfa; }
 .slot-grid button.selected { border-color: var(--pink); background: #fff0f6; color: var(--pink); }
 .slot-grid button.selected svg, .slot-grid button.selected small { color: var(--pink); }
+.compact-date-picker { margin: 20px 0 12px; }
+.available-slot-preview { padding: 18px 0 26px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+.appointment-management { grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 12px; }
+.appointment-management .inline-actions, .client-booking-actions .inline-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 9px; }
+.appointment-management details { position: relative; }
+.appointment-management summary { list-style: none; cursor: pointer; }
+.appointment-management summary::-webkit-details-marker { display: none; }
+.appointment-reschedule-form { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px; margin-top: 8px; background: #fff7fa; border: 1px solid #f4dbe5; border-radius: 12px; }
+.reschedule-request { background: #effaf8; border: 1px solid #cdebe5; border-radius: 12px; padding: 12px; margin-bottom: 10px; display: grid; gap: 8px; }
+.action-message { color: var(--pink); margin: 8px 0 0; }
+.client-booking-list { display: grid; gap: 16px; }
+.client-booking-actions { margin-top: 18px; border-top: 1px solid #e8eeee; padding-top: 14px; }
+.reschedule-slot-panel { margin-top: 14px; padding: 16px; border-radius: 14px; background: #f7fbfa; border: 1px solid #dce9e7; }
 .booking-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 35px 15px 14px; color: var(--muted); font-size: 12px; text-align: center; }
 .booking-empty svg { color: var(--teal); font-size: 28px; }
 .booking-empty strong { color: var(--navy); }

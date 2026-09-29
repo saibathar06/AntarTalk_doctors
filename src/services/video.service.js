@@ -21,11 +21,12 @@ async function videoRequest(path, body) {
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(body)
     });
+    const payload = await response.json().catch(() => null);
     if (!response.ok) {
-      logger.warn({ status: response.status, path }, 'Video service request rejected');
+      logger.warn({ status: response.status, path, providerCode: payload?.code ?? 'UNKNOWN' }, 'Video service request rejected');
       throw new AppError(502, 'VIDEO_SERVICE_UNAVAILABLE', 'Video calling is temporarily unavailable.');
     }
-    return await response.json();
+    return payload;
   } catch (error) {
     if (error instanceof AppError) throw error;
     logger.warn({ errorType: error?.name ?? 'Error', path }, 'Video service request failed');

@@ -58,6 +58,7 @@ const schema = z.object({
   RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional(),
   RAZORPAY_CURRENCY: z.literal('INR').default('INR'),
   PLATFORM_COMMISSION_PERCENT: z.coerce.number().min(0).max(99.99).default(20),
+  DOCTOR_SAME_DAY_CANCELLATION_PENALTY_PERCENT: z.coerce.number().min(0).max(100).default(5),
   EXPO_ACCESS_TOKEN: z.string().min(1).optional(),
   PUSH_DELIVERY_ENABLED: z.string().default('true').transform((v) => v.trim().toLowerCase() === 'true'),
   VIDEO_SERVICE_URL: z.string().url().optional(),

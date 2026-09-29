@@ -39,6 +39,7 @@ beforeEach(() => {
     },
     earning: { aggregate: vi.fn(async () => ({ _sum: { amount: new Prisma.Decimal(1000) } })) },
     earningReversal: { aggregate: vi.fn(async () => ({ _sum: { amount: new Prisma.Decimal(0) } })) },
+    doctorPenalty: { aggregate: vi.fn(async () => ({ _sum: { amount: new Prisma.Decimal(0) } })) },
     payoutTransaction: {
       aggregate: vi.fn(async () => ({ _sum: { amount: new Prisma.Decimal(payouts.reduce((sum, p) => sum + Number(p.amount), 0)) } })),
       create: vi.fn(async ({ data }) => { const value = { ...data, id: 'payout' }; payouts.push(value); return value; })

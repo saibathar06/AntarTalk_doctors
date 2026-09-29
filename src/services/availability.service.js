@@ -1,4 +1,5 @@
 import { AppError } from '../errors/AppError.js';
+import { getAvailableSlots } from './slot.service.js';
 import { DateTime } from 'luxon';
 import { bookingWindow } from '../utils/bookingWindow.js';
 import { effectiveWorkingHours, getDefaultTiming } from '../utils/defaultTiming.js';
@@ -109,6 +110,10 @@ export async function replaceWorkingHours(userId, doctorId, { timezone, windows 
 
 export async function listBlockedSlots(doctorId) {
   return prisma.doctorBlockedSlot.findMany({ where: { doctorId, endTime: { gt: new Date() } }, orderBy: { startTime: 'asc' } });
+}
+
+export function previewAvailableSlots(doctorId, from, to) {
+  return getAvailableSlots({ doctorId, from, to, includeReservations: true, allowPaused: true });
 }
 
 export async function createBlockedSlot(userId, doctorId, input, context = {}) {

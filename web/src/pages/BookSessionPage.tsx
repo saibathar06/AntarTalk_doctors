@@ -18,7 +18,7 @@ import type {
   SlotReservation,
 } from "../types";
 
-type ClientSession = {
+export type ClientSession = {
   accessToken: string;
   refreshToken: string;
   email: string;
@@ -74,7 +74,7 @@ function PublicDoctorAvatar({ doctor }: { doctor: BookableDoctor }) {
   );
 }
 
-function ClientSignIn({ onSignedIn }: { onSignedIn: (session: ClientSession) => void }) {
+export function ClientSignIn({ onSignedIn }: { onSignedIn: (session: ClientSession) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -344,7 +344,7 @@ export function BookSessionPage() {
             <div><dt>Payment status</dt><dd>Successful payment accepted</dd></div>
             <div><dt>Booking status</dt><dd>{booking.status}</dd></div>
           </dl>
-          <Link className="button" to={`/book-session/${doctor.id}`}>Back to doctor</Link>
+          <div className="inline-actions"><Link className="button" to="/my-bookings">View my bookings</Link><Link className="button secondary" to={`/book-session/${doctor.id}`}>Back to doctor</Link></div>
         </section>
       </main>
     );

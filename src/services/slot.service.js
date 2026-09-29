@@ -87,6 +87,8 @@ export async function getAvailableSlots(
     from,
     to,
     includeReservations = true,
+    excludeBookingId = undefined,
+    allowPaused = false,
   },
   db = prisma
 ) {
@@ -119,9 +121,8 @@ export async function getAvailableSlots(
     },
   });
 
-  if (
-    !canDoctorTakeSessions(profile)
-  ) {
+  const previewEligible = allowPaused && profile?.verificationStatus === 'VERIFIED' && profile.user?.role === 'DOCTOR' && profile.user?.accountStatus === 'ACTIVE' && profile.user?.emailVerifiedAt;
+  if (!canDoctorTakeSessions(profile) && !previewEligible) {
     throw new AppError(
       404,
       'DOCTOR_NOT_BOOKABLE',
@@ -157,6 +158,7 @@ export async function getAvailableSlots(
     db.booking.findMany({
       where: {
         doctorId,
+        ...(excludeBookingId ? { id: { not: excludeBookingId } } : {}),
         status: {
           in: ['PENDING', 'CONFIRMED'],
         },
@@ -205,7 +207,8 @@ export async function getAvailableSlots(
 export async function assertStructurallyBookable(
   doctorId,
   startTime,
-  db = prisma
+  db = prisma,
+  excludeBookingId
 ) {
   const slots = await getAvailableSlots(
     {
@@ -216,6 +219,7 @@ export async function assertStructurallyBookable(
           scheduling.slotIntervalMinutes * 60_000
       ),
       includeReservations: false,
+      excludeBookingId,
     },
     db
   );

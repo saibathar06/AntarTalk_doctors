@@ -77,7 +77,7 @@ app.use('/api/notifications', notificationRouter);
 
 const webRoot = fileURLToPath(new URL('../web/dist/', import.meta.url));
 app.use('/assets', express.static(path.join(webRoot, 'assets'), { immutable: true, maxAge: '1y' }));
-app.get(['/doctor', '/doctor/{*route}', '/book-session/{*route}'], (_req, res, next) => res.sendFile(path.join(webRoot, 'index.html'), (error) => { if (error) next(error); }));
+app.get(['/doctor', '/doctor/{*route}', '/book-session/{*route}', '/my-bookings', '/my-bookings/{*route}'], (_req, res, next) => res.sendFile(path.join(webRoot, 'index.html'), (error) => { if (error) next(error); }));
 
 app.use(notFound);
 app.use(errorHandler);

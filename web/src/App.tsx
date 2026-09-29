@@ -35,6 +35,7 @@ import { AvailabilityPage } from "./pages/AvailabilityPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { AdminVerificationPage } from "./pages/AdminVerificationPage";
 import { BookSessionPage } from "./pages/BookSessionPage";
+import { ClientBookingsPage } from "./pages/ClientBookingsPage";
 
 const links = [
   ["dashboard", "Dashboard", HouseIcon],
@@ -180,6 +181,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/book-session/:doctorId" element={<BookSessionPage />} />
+      <Route path="/my-bookings" element={<ClientBookingsPage />} />
       <Route path="/doctor/login" element={<AuthPage mode="login" />} />
       <Route path="/doctor/register" element={<AuthPage mode="register" />} />
       <Route path="/doctor/verify" element={<AuthPage mode="verify" />} />

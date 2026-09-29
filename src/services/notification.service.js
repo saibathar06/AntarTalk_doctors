@@ -41,6 +41,40 @@ async function createNotification(tx, userId, content) {
   return notification;
 }
 
+export async function enqueueBookingEventNotifications(tx, booking, doctor, kind, eventData = {}, audiences = ['CLIENT', 'DOCTOR']) {
+  const start = DateTime.fromJSDate(booking.startTime, { zone: 'Asia/Kolkata' }).toFormat('dd LLL, hh:mm a');
+  const proposed = eventData.proposedStartTime
+    ? DateTime.fromISO(eventData.proposedStartTime, { zone: 'utc' }).setZone('Asia/Kolkata').toFormat('dd LLL, hh:mm a')
+    : start;
+  const content = {
+    CANCELLATION: {
+      CLIENT: { type: 'SESSION_CANCELLED', title: 'Session cancelled', body: eventData.cancelledBy === 'DOCTOR' ? `Your ${start} session was cancelled by the professional. A full refund has been initiated.` : `Your ${start} session has been cancelled.` },
+      DOCTOR: { type: 'SESSION_CANCELLED', title: 'Session cancelled', body: eventData.cancelledBy === 'DOCTOR' ? `You cancelled the ${start} session.` : `The client cancelled the ${start} session.` }
+    },
+    RESCHEDULE_REQUESTED: {
+      CLIENT: { type: 'RESCHEDULE_REQUESTED', title: 'Reschedule requested', body: `Your request to move the session to ${proposed} was sent to Dr. ${doctor.firstName} ${doctor.lastName}.` },
+      DOCTOR: { type: 'RESCHEDULE_REQUESTED', title: 'Reschedule request', body: `${booking.clientName || 'A client'} requested ${proposed}.` }
+    },
+    RESCHEDULED: {
+      CLIENT: { type: 'SESSION_RESCHEDULED', title: 'Session rescheduled', body: `Your session with Dr. ${doctor.firstName} ${doctor.lastName} is now scheduled for ${start}.` },
+      DOCTOR: { type: 'SESSION_RESCHEDULED', title: 'Session rescheduled', body: `The session with ${booking.clientName || 'your client'} is now scheduled for ${start}.` }
+    },
+    RESCHEDULE_REJECTED: {
+      CLIENT: { type: 'RESCHEDULE_REJECTED', title: 'Reschedule request declined', body: `Your session remains scheduled for ${start}.` },
+      DOCTOR: { type: 'RESCHEDULE_REJECTED', title: 'Request declined', body: `The session remains scheduled for ${start}.` }
+    }
+  };
+  for (const audience of audiences) {
+    const item = content[kind]?.[audience];
+    if (!item) continue;
+    const userId = audience === 'CLIENT' ? booking.clientId : doctor.userId;
+    await createNotification(tx, userId, {
+      ...item,
+      data: { bookingId: booking.id, startTime: booking.startTime.toISOString(), route: audience === 'CLIENT' ? `/bookings/${booking.id}` : `/doctor/appointments/${booking.id}` }
+    });
+  }
+}
+
 export async function enqueueBookingNotifications(tx, booking, doctor) {
   const start = DateTime.fromJSDate(booking.startTime, { zone: 'Asia/Kolkata' }).toFormat('dd LLL, hh:mm a');
   await createNotification(tx, booking.clientId, {

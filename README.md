@@ -56,12 +56,15 @@ RAZORPAY_KEY_SECRET=your-razorpay-test-key-secret
 RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
 RAZORPAY_CURRENCY=INR
 PLATFORM_COMMISSION_PERCENT=20
+DOCTOR_SAME_DAY_CANCELLATION_PENALTY_PERCENT=5
 BOOKING_TRANSACTION_TIMEOUT_MS=20000
 ```
 
 CAPTCHA is currently removed. Password validation, email OTP, resend cooldowns and authentication rate limits remain enabled. No CAPTCHA environment variables are required.
 
-Razorpay orders are created by the API from the doctor’s stored `consultationFee`; clients never submit an amount or commission. The server verifies the returned checkout signature and captured payment before confirming the booking. Normal confirmation requires the existing Redis hold. If the hold expires after Razorpay captures payment, the trusted provider-confirmation path may recover the booking from the payment's server-bound client, doctor and UTC slot data; PostgreSQL overlap constraints remain authoritative. `BOOKING_TRANSACTION_TIMEOUT_MS` bounds the serializable confirmation transaction and defaults to 20 seconds. Configure a Razorpay webhook at `POST /api/payments/razorpay/webhook` with the same webhook secret. The webhook is signed and records capture status, but it never creates a booking by itself.
+Razorpay orders are created by the API from the doctor’s stored `consultationFee`; clients never submit an amount or commission. The server verifies the returned checkout signature and captured payment before confirming the booking. Normal confirmation requires the existing Redis hold. If the hold expires after Razorpay captures payment, the trusted provider-confirmation path may recover the booking from the payment's server-bound client, doctor and UTC slot data; PostgreSQL overlap constraints remain authoritative. `BOOKING_TRANSACTION_TIMEOUT_MS` bounds the serializable confirmation transaction and defaults to 20 seconds. Configure a Razorpay webhook at `POST /api/payments/razorpay/webhook` with the same webhook secret and subscribe to `payment.captured` and `refund.processed`. The webhook never creates a booking by itself.
+
+Doctors explicitly complete a session after its scheduled therapy time; only that trusted transition creates an available earning. Client cancellation retains the charge and creates no refund. Doctor cancellation creates a durable full-refund job; a same-day cancellation also records a 5% adjustment against future available earnings. Refunds are retried and reconciled with Razorpay. A client reschedule request leaves the original appointment unchanged until its doctor approves it; doctors may move an appointment directly, and each booking can be successfully rescheduled only once. All lifecycle changes queue email and in-app/mobile push notifications.
 
 ## How it works
 
@@ -72,6 +75,7 @@ Razorpay orders are created by the API from the doctor’s stored `consultationF
 - Profile photos accept JPEG, PNG and WebP up to 5 MB. The server decodes, rotates and resizes them to an 800 px maximum JPEG before private storage. Once verified, a doctor can edit personal and client-facing practice information without another review; verified registration credentials and their credential document are locked and must be corrected through support.
 - Dashboard, appointments, clients, profile, uploads, availability, settings and earnings use real APIs. No production demo data. Public doctor discovery includes gender when supplied, except `PREFER_NOT_TO_SAY`.
 - PostgreSQL owns bookings and financial records; Redis owns temporary 180-second holds. Shared exclusion constraints prevent conflicting bookings.
+- Client bookings are listed at `/my-bookings`; cancellation and reschedule actions always use the authenticated client account and real backend slots.
 - Clients can search `/api/bookings/doctors/search` by an exact IST date/time and optional professional filters. The backend—not React—applies the real schedule, blocks, bookings and active Redis holds and returns only available doctors within the rolling seven-day horizon.
 - Default window: **40 minutes therapy + 20 minutes protected buffer = one 60-minute booking**. Configurable via environment.
 - Appointment timestamps remain UTC. New doctor profiles and recurring hours use only `Asia/Kolkata` (IST); overnight `23:00–03:00` ends the next day. Existing appointments retain their UTC timestamps. A legacy non-IST practice must save its profile as IST and recreate its weekly hours; old hours are disabled instead of being silently relabelled.

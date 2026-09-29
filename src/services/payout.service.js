@@ -21,30 +21,42 @@ function payoutDestination(encrypted) {
 }
 
 async function balances(doctorId, currency, tx = prisma) {
-  const [earned, withdrawn, reversed] = await Promise.all([
+  const [earned, withdrawn, reversed, penalties] = await Promise.all([
     tx.earning.aggregate({ where: { doctorId, currency, status: 'AVAILABLE' }, _sum: { amount: true } }),
     tx.payoutTransaction.aggregate({ where: { doctorId, currency, status: { in: ['PENDING', 'PROCESSING', 'COMPLETED'] } }, _sum: { amount: true } }),
-    reversedAmount(doctorId, currency, tx)
+    reversedAmount(doctorId, currency, tx),
+    tx.doctorPenalty.aggregate({ where: { doctorId, currency }, _sum: { amount: true } })
   ]);
-  const earnedAmount = (earned._sum.amount ?? new Prisma.Decimal(0)).minus(reversed._sum.amount ?? new Prisma.Decimal(0));
+  const grossEarned = (earned._sum.amount ?? new Prisma.Decimal(0)).minus(reversed._sum.amount ?? new Prisma.Decimal(0));
+  const penaltyAmount = penalties._sum.amount ?? new Prisma.Decimal(0);
+  const earnedAmount = grossEarned.minus(penaltyAmount);
   const withdrawnAmount = withdrawn._sum.amount ?? new Prisma.Decimal(0);
-  return { earned: earnedAmount, withdrawn: withdrawnAmount, available: earnedAmount.minus(withdrawnAmount) };
+  return { grossEarned, penalties: penaltyAmount, earned: earnedAmount, withdrawn: withdrawnAmount, available: earnedAmount.minus(withdrawnAmount) };
 }
 
 export async function earningsSummary(doctorId) {
-  const currencies = await prisma.earning.findMany({ where: { doctorId }, distinct: ['currency'], select: { currency: true } });
-  return Promise.all(currencies.map(async ({ currency }) => {
+  const [earningCurrencies, penaltyCurrencies] = await Promise.all([
+    prisma.earning.findMany({ where: { doctorId }, distinct: ['currency'], select: { currency: true } }),
+    prisma.doctorPenalty.findMany({ where: { doctorId }, distinct: ['currency'], select: { currency: true } })
+  ]);
+  const currencies = [...new Set([...earningCurrencies, ...penaltyCurrencies].map((item) => item.currency))];
+  return Promise.all(currencies.map(async (currency) => {
     const balance = await balances(doctorId, currency);
-    return { currency, earned: money(balance.earned), withdrawn: money(balance.withdrawn), available: money(balance.available) };
+    return { currency, grossEarned: money(balance.grossEarned), penalties: money(balance.penalties), earned: money(balance.earned), withdrawn: money(balance.withdrawn), available: money(balance.available) };
   }));
 }
 
 export async function earningTransactions(doctorId, { page, limit }) {
-  const where = { doctorId };
-  const [items, total] = await Promise.all([
-    prisma.earning.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
-    prisma.earning.count({ where })
+  const [earnings, penalties] = await Promise.all([
+    prisma.earning.findMany({ where: { doctorId }, include: { booking: { select: { startTime: true } } }, orderBy: { createdAt: 'desc' } }),
+    prisma.doctorPenalty.findMany({ where: { doctorId }, include: { booking: { select: { startTime: true } } }, orderBy: { createdAt: 'desc' } })
   ]);
+  const ledger = [
+    ...earnings.map((item) => ({ ...item, type: 'EARNING', signedAmount: item.amount.toString() })),
+    ...penalties.map((item) => ({ ...item, type: 'PENALTY', status: 'APPLIED', signedAmount: `-${item.amount.toString()}` }))
+  ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const total = ledger.length;
+  const items = ledger.slice((page - 1) * limit, page * limit);
   return { items: jsonSafe(items), pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
 }
 

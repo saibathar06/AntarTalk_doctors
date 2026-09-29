@@ -14,6 +14,20 @@ Continue through the existing flow:
 2. `POST /api/bookings/razorpay/order` and complete Razorpay checkout.
 3. `POST /api/bookings/razorpay/verify` with an `Idempotency-Key`; verification confirms the booking.
 
+## Booking lifecycle after confirmation
+
+| Actor | Method and route | Result |
+| --- | --- | --- |
+| Client | `GET /api/bookings/mine` | Lists only that client's bookings, payments, refunds and latest reschedule state |
+| Client | `POST /api/bookings/:bookingId/cancel` | Cancels a future confirmed booking; the consultation charge is retained |
+| Client | `POST /api/bookings/:bookingId/reschedule-requests` | Proposes a real backend-generated UTC `startTime`; the original booking stays confirmed |
+| Doctor | `POST /api/doctor/reschedule-requests/:id/respond` | Approves or rejects a pending client proposal; approval rechecks availability transactionally |
+| Doctor | `POST /api/doctor/sessions/:bookingId/reschedule` | Directly moves the appointment after the same availability checks |
+| Doctor | `POST /api/doctor/sessions/:bookingId/cancel` | Cancels and queues a full Razorpay refund; same-day cancellation records the configured adjustment |
+| Doctor | `POST /api/doctor/sessions/:bookingId/complete` | After the therapy period, marks the session completed and atomically creates the available earning |
+
+A booking can be successfully rescheduled once. Cancellation and rescheduling are unavailable after the session starts; rescheduling also closes when the video join window opens. Lifecycle emails are always queued. In-app notifications are always stored, and mobile push deliveries are queued only for active registered devices.
+
 ## App notification API
 
 All routes require an access token. CLIENT and DOCTOR accounts use the same endpoints.
@@ -42,4 +56,12 @@ On booking confirmation, the API creates a durable `VideoCall` row. A worker pro
 
 Only the booking's doctor or client can request a ticket. The booking must be `CONFIRMED`, and requests are allowed from `JOIN_EARLY_MINUTES` before start until the 40-minute therapy period ends. The 20-minute buffer is never joinable. For `WEB`, the trusted parent origin is selected server-side; callers cannot inject it. For `MOBILE`, the React Native WebView receives the returned `launchUrl` and should restrict navigation to the returned `videoOrigin` and `/call`.
 
-Required production rollout: apply migration `20260929010000_discovery_notifications_video`, deploy the video ZIP as a separate HTTPS service, set its private API key on both services, then set the exact web origins. Without video configuration booking still works; join returns `503 VIDEO_NOT_CONFIGURED` and the provisioning worker remains idle.
+Required production rollout: apply migrations through `20260930010000_booking_lifecycle`, deploy the video ZIP as a separate HTTPS service, set its private API key on both services, then set the exact web origins. Without video configuration booking still works; join returns `503 VIDEO_NOT_CONFIGURED` and the provisioning worker remains idle.
+
+For a deployed call service, the following values must agree exactly:
+
+- Video service `SERVICE_API_KEY` = API `VIDEO_SERVICE_API_KEY`.
+- Video service `PUBLIC_ORIGIN` = API `VIDEO_SERVICE_URL`, both as the exact HTTPS origin without a trailing path.
+- Video service `APP_ORIGINS` includes the exact API-provided `DOCTOR_WEB_ORIGIN` and `CLIENT_WEB_ORIGIN` values.
+
+Production video startup also requires valid `TURN_URLS` and a `TURN_SECRET` of at least 32 characters. A healthy `GET /healthz` only proves the service/database process is running; real public calling still requires TURN. The API safely logs only the provider HTTP status/code and request path when provisioning or ticket issuance fails.

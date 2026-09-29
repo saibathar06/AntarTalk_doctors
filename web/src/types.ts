@@ -91,6 +91,12 @@ export interface Appointment {
   endTime: string;
   sessionDurationMinutes: number;
   bufferDurationMinutes: number;
+  cancelledAt?: string | null;
+  cancelledBy?: "CLIENT" | "DOCTOR" | null;
+  cancellationReason?: string | null;
+  rescheduleCount: number;
+  earning?: { amount: string; currency: string; status: string } | null;
+  rescheduleRequests: Array<{ id: string; proposedStartTime: string; proposedEndTime: string; reason: string | null; createdAt: string }>;
   join: { state: string; canJoin: boolean; opensAt: string; closesAt: string };
 }
 export interface Dashboard {
@@ -123,6 +129,8 @@ export interface Client {
 }
 export interface Balance {
   currency: string;
+  grossEarned?: string;
+  penalties?: string;
   earned: string;
   withdrawn: string;
   available: string;
@@ -134,6 +142,10 @@ export interface Earning {
   amount: string;
   currency: string;
   status: string;
+  type?: "EARNING" | "PENALTY";
+  signedAmount?: string;
+  reason?: string;
+  booking?: { startTime: string };
 }
 export interface PayoutAccount {
   id: string;
@@ -202,4 +214,12 @@ export interface ClientBooking {
   status: "CONFIRMED" | string;
   paymentId: string | null;
   createdAt: string;
+  cancelledAt?: string | null;
+  cancelledBy?: "CLIENT" | "DOCTOR" | null;
+  cancellationReason?: string | null;
+  rescheduleCount?: number;
+  doctor?: { firstName: string; lastName: string; professionalCategory: string; preferredSessionLanguage: string | null };
+  payment?: { amount: string; currency: string; status: string } | null;
+  refund?: { amount: string; currency: string; status: string; completedAt: string | null } | null;
+  rescheduleRequests?: Array<{ id: string; proposedStartTime: string; status: string; reason: string | null }>;
 }

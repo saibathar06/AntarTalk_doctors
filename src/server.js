@@ -6,6 +6,7 @@ import { app } from './app.js';
 import { processBookingEmails } from './services/bookingEmail.service.js';
 import { processPushDeliveries } from './services/notification.service.js';
 import { processVideoProvisioning } from './services/video.service.js';
+import { processRazorpayRefunds } from './services/razorpay.service.js';
 
 // Redis-backed middleware may begin the lazy connection while modules load; ping
 // waits for that same connection without attempting a second connect().
@@ -27,9 +28,10 @@ async function asyncJobTick() {
   if (processingAsyncJobs) return;
   processingAsyncJobs = true;
   try {
-    const results = await Promise.allSettled([processPushDeliveries(), processVideoProvisioning()]);
+    const results = await Promise.allSettled([processPushDeliveries(), processVideoProvisioning(), processRazorpayRefunds()]);
     if (results[0].status === 'rejected') logger.error({ errorType: results[0].reason?.name ?? 'Error' }, 'Push notification queue unavailable');
     if (results[1].status === 'rejected') logger.error({ errorType: results[1].reason?.name ?? 'Error' }, 'Video provisioning queue unavailable');
+    if (results[2].status === 'rejected') logger.error({ errorType: results[2].reason?.name ?? 'Error' }, 'Refund queue unavailable');
   } finally { processingAsyncJobs = false; }
 }
 const asyncJobTimer = globalThis.setInterval(() => { void asyncJobTick(); }, 15000);

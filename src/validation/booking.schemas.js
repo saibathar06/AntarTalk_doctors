@@ -54,3 +54,20 @@ export const razorpayVerifySchema = z.object({
     ...attendee
   }).strict()
 });
+
+export const clientBookingListSchema = z.object({ query: z.object({
+  ...pagination,
+  status: z.enum(['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'NO_SHOW']).optional()
+}) });
+
+export const cancelBookingSchema = z.object({
+  params: z.object({ bookingId: uuid }),
+  body: z.object({ reason: z.string().trim().max(500).optional() }).default({})
+});
+
+export const requestRescheduleSchema = z.object({
+  params: z.object({ bookingId: uuid }),
+  body: z.object({ startTime: isoDateTime, reason: z.string().trim().max(500).optional() }).strict()
+});
+
+export const cancelRescheduleSchema = z.object({ params: z.object({ bookingId: uuid, requestId: uuid }) });

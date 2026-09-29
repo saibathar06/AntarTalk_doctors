@@ -8,7 +8,13 @@ import { earningsSummary } from './payout.service.js';
 
 // Stable only within this practice; never disclose client email or phone.
 const clientLabel = (doctorId, clientId) => `Client ${crypto.createHmac('sha256', env.OTP_PEPPER).update(`${doctorId}:${clientId}`).digest('hex').slice(0, 10).toUpperCase()}`;
-const select = { id: true, clientId: true, startTime: true, endTime: true, sessionDurationMinutes: true, bufferDurationMinutes: true, status: true };
+/** @type {import('@prisma/client').Prisma.BookingSelect} */
+const select = {
+  id: true, clientId: true, startTime: true, endTime: true, sessionDurationMinutes: true, bufferDurationMinutes: true,
+  status: true, cancelledAt: true, cancelledBy: true, cancellationReason: true, rescheduleCount: true,
+  earning: { select: { amount: true, currency: true, status: true } },
+  rescheduleRequests: { where: { status: 'PENDING' }, select: { id: true, proposedStartTime: true, proposedEndTime: true, reason: true, createdAt: true }, take: 1 }
+};
 export function joinState(booking, eligible, now = Date.now()) {
   const therapyEnd = Math.min(booking.endTime.getTime(), booking.startTime.getTime() + booking.sessionDurationMinutes * 60000);
   const opensAt = new Date(booking.startTime.getTime() - env.JOIN_EARLY_MINUTES * 60000);

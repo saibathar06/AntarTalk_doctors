@@ -94,6 +94,29 @@ enum NotificationType {
   SESSION_BOOKED
   SESSION_CANCELLED
   SESSION_REMINDER
+  RESCHEDULE_REQUESTED
+  SESSION_RESCHEDULED
+  RESCHEDULE_REJECTED
+  REFUND_PROCESSED
+}
+
+enum CancellationActor {
+  CLIENT
+  DOCTOR
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum RescheduleStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
 }
 
 enum VideoCallState {
@@ -124,6 +147,7 @@ model User {
   payments               Payment[]     @relation("ClientPayments")
   pushDevices            PushDevice[]
   notifications          Notification[]
+  rescheduleRequests     RescheduleRequest[] @relation("RescheduleRequester")
 }
 
 model DoctorProfile {
@@ -172,6 +196,7 @@ model DoctorProfile {
   payoutAccounts           PayoutAccount[]
   payouts                  PayoutTransaction[]
   paymentOrders            Payment[] @relation("PaymentOrderDoctor")
+  penalties                DoctorPenalty[]
 
   @@index([verificationStatus, isAcceptingBookings])
 }
@@ -249,7 +274,10 @@ model Booking {
   paymentId             String?       @unique @db.Uuid
   reservationExpiresAt  DateTime?      @db.Timestamptz(3)
   cancelledAt           DateTime?     @db.Timestamptz(3)
+  cancelledBy           CancellationActor?
+  cancellationReason    String?       @db.VarChar(500)
   completedAt           DateTime?     @db.Timestamptz(3)
+  rescheduleCount       Int           @default(0)
   createdAt             DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt             DateTime      @updatedAt @db.Timestamptz(3)
   doctor                DoctorProfile @relation(fields: [doctorId], references: [id])
@@ -258,6 +286,9 @@ model Booking {
   earning               Earning?
   confirmationEmails    BookingEmail[]
   videoCall             VideoCall?
+  refund                RefundTransaction?
+  penalty               DoctorPenalty?
+  rescheduleRequests    RescheduleRequest[]
 
   @@index([doctorId, startTime])
   @@index([clientId, startTime])
@@ -333,11 +364,14 @@ model BookingEmail {
   id String @id @default(uuid()) @db.Uuid
   bookingId String @db.Uuid
   audience String @db.VarChar(10)
+  kind String @default("CONFIRMATION") @db.VarChar(40)
+  eventKey String @default("initial") @db.VarChar(80)
+  eventData Json?
   attempts Int @default(0)
   nextAttemptAt DateTime @default(now()) @db.Timestamptz(3)
   sentAt DateTime? @db.Timestamptz(3)
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  @@unique([bookingId, audience])
+  @@unique([bookingId, audience, kind, eventKey])
   @@index([sentAt, nextAttemptAt])
 }
 
@@ -360,9 +394,62 @@ model Payment {
   createdAt         DateTime      @default(now()) @db.Timestamptz(3)
   updatedAt         DateTime      @updatedAt @db.Timestamptz(3)
   booking           Booking?
+  refund            RefundTransaction?
   client            User          @relation("ClientPayments", fields: [clientId], references: [id])
 
   @@index([clientId, status])
+}
+
+model RefundTransaction {
+  id                String       @id @default(uuid()) @db.Uuid
+  bookingId         String       @unique @db.Uuid
+  paymentId         String       @unique @db.Uuid
+  amount            Decimal      @db.Decimal(12, 2)
+  currency          String       @db.Char(3)
+  status            RefundStatus @default(PENDING)
+  providerReference String?      @unique @db.VarChar(200)
+  attempts          Int          @default(0)
+  nextAttemptAt     DateTime     @default(now()) @db.Timestamptz(3)
+  lastErrorCode     String?      @db.VarChar(100)
+  completedAt       DateTime?    @db.Timestamptz(3)
+  createdAt         DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime     @updatedAt @db.Timestamptz(3)
+  booking           Booking      @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  payment           Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([status, nextAttemptAt])
+}
+
+model DoctorPenalty {
+  id        String        @id @default(uuid()) @db.Uuid
+  doctorId  String        @db.Uuid
+  bookingId String        @unique @db.Uuid
+  amount    Decimal       @db.Decimal(12, 2)
+  currency  String        @db.Char(3)
+  reason    String        @db.VarChar(120)
+  createdAt DateTime      @default(now()) @db.Timestamptz(3)
+  doctor    DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  booking   Booking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@index([doctorId, currency, createdAt])
+}
+
+model RescheduleRequest {
+  id                String           @id @default(uuid()) @db.Uuid
+  bookingId         String           @db.Uuid
+  requesterId       String           @db.Uuid
+  proposedStartTime DateTime         @db.Timestamptz(3)
+  proposedEndTime   DateTime         @db.Timestamptz(3)
+  status            RescheduleStatus @default(PENDING)
+  reason            String?          @db.VarChar(500)
+  respondedAt       DateTime?        @db.Timestamptz(3)
+  createdAt         DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @db.Timestamptz(3)
+  booking           Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  requester         User             @relation("RescheduleRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+
+  @@index([bookingId, status, createdAt])
+  @@index([requesterId, status, createdAt])
 }
 
 model Earning {

@@ -123,7 +123,7 @@ export function DashboardPage() {
               </div>
               {resource.data.schedule.items.length ? (
                 resource.data.schedule.items.map((item) => (
-                  <AppointmentCard key={item.id} appointment={item} />
+                  <AppointmentCard key={item.id} appointment={item} onChanged={resource.reload} />
                 ))
               ) : (
                 <EmptyState title="Your day has room to breathe">
@@ -139,10 +139,7 @@ export function DashboardPage() {
         <section className="card note-card">
           <p className="eyebrow">YOUR TIME MATTERS</p>
           <h2>Room to reset, between sessions.</h2>
-          <p>
-            Each appointment includes protected buffer time. Your working hours
-            stay entirely in your hands.
-          </p>
+          <p>Your working hours and time away stay entirely in your hands.</p>
           {profile!.verificationStatus === "VERIFIED" && <Link to="/doctor/availability">
             Manage availability <ArrowRightIcon />
           </Link>}
@@ -208,7 +205,7 @@ export function AppointmentsPage() {
             <>
               {resource.data.items.length ? (
                 resource.data.items.map((item) => (
-                  <AppointmentCard key={item.id} appointment={item} />
+                  <AppointmentCard key={item.id} appointment={item} onChanged={resource.reload} />
                 ))
               ) : (
                 <EmptyState title="No appointments here yet" />
@@ -292,8 +289,7 @@ function VerifiedEarnings() {
               <span>Available · {balance.currency}</span>
               <strong>{balance.available}</strong>
               <p>
-                Earned {balance.earned} · Allocated to payouts{" "}
-                {balance.withdrawn}
+                Completed sessions {balance.grossEarned ?? balance.earned} · Adjustments {balance.penalties ?? "0.00"} · Allocated to payouts {balance.withdrawn}
               </p>
             </section>
           ))}
@@ -308,7 +304,7 @@ function VerifiedEarnings() {
       <section className="card">
         <div className="section-title">
           <h2>Earnings ledger</h2>
-          <p>Every row is a trusted session earning record, with its booking reference, amount, date, and current status.</p>
+          <p>Earnings are credited only after you mark a finished session complete. Cancellation adjustments are shown separately.</p>
         </div>
         {transactions.loading ? (
           <LoadingState />
@@ -334,10 +330,10 @@ function VerifiedEarnings() {
                           </td>
                           <td>{item.bookingId.slice(0, 8)}</td>
                           <td>
-                            {item.currency} {item.amount}
+                            {item.currency} {item.signedAmount ?? item.amount}
                           </td>
                           <td>
-                            <span className="badge">{item.status}</span>
+                            <span className="badge">{item.type === "PENALTY" ? "ADJUSTMENT" : item.status}</span>
                           </td>
                         </tr>
                       ))}
@@ -365,7 +361,7 @@ export function EarningsPage() {
     <>
       <PageHeader
         title="Your work, accounted for."
-        description="A transparent view of your session earnings."
+        description="A transparent view of completed-session earnings and account adjustments."
       />
       {profile!.verificationStatus === "VERIFIED" ? (
         <VerifiedEarnings />

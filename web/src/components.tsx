@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { DateTime } from "luxon";
 import {
   CalendarBlankIcon,
+  CalendarDotsIcon,
   VideoCameraIcon,
   ArrowRightIcon,
   CheckCircleIcon,
@@ -253,7 +255,58 @@ export function JoinSessionButton({
     </div>
   );
 }
-export function AppointmentCard({ appointment }: { appointment: Appointment }) {
+function AppointmentActions({ appointment, onChanged }: { appointment: Appointment; onChanged?: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [newTime, setNewTime] = useState("");
+  async function act(path: string, body: unknown = {}) {
+    setBusy(true); setMessage("");
+    try {
+      await api(path, { method: "POST", body: JSON.stringify(body) });
+      onChanged?.();
+    } catch (error) { setMessage((error as Error).message); }
+    finally { setBusy(false); }
+  }
+  async function cancel() {
+    if (!window.confirm("Cancel this appointment? The client will receive a full refund. A 5% adjustment applies when cancelling on the appointment day.")) return;
+    const reason = window.prompt("Reason for cancellation (optional)") ?? "";
+    await act(`/api/doctor/sessions/${appointment.id}/cancel`, { reason });
+  }
+  async function reschedule(event: React.FormEvent) {
+    event.preventDefault();
+    const value = DateTime.fromISO(newTime, { zone: "Asia/Kolkata" });
+    if (!value.isValid) return setMessage("Choose a valid appointment time.");
+    await act(`/api/doctor/sessions/${appointment.id}/reschedule`, { startTime: value.toUTC().toISO() });
+  }
+  const request = appointment.rescheduleRequests?.[0];
+  if (appointment.status !== "CONFIRMED") return null;
+  return <div className="appointment-management">
+    {request && <div className="reschedule-request">
+      <strong>Client requested {formatDate(request.proposedStartTime, "Asia/Kolkata")} at {formatTime(request.proposedStartTime, "Asia/Kolkata")}</strong>
+      {request.reason && <small>{request.reason}</small>}
+      <div className="inline-actions">
+        <button className="button small" disabled={busy} onClick={() => void act(`/api/doctor/reschedule-requests/${request.id}/respond`, { decision: "APPROVE" })}>Approve</button>
+        <button className="button secondary small" disabled={busy} onClick={() => void act(`/api/doctor/reschedule-requests/${request.id}/respond`, { decision: "REJECT" })}>Decline</button>
+      </div>
+    </div>}
+    <div className="inline-actions">
+      {appointment.join.state === "ENDED" && <button className="button small" disabled={busy} onClick={() => void act(`/api/doctor/sessions/${appointment.id}/complete`)}>Complete session</button>}
+      {new Date(appointment.startTime) > new Date() && <>
+        <details>
+          <summary className="button secondary small"><CalendarDotsIcon /> Reschedule</summary>
+          <form className="appointment-reschedule-form" onSubmit={reschedule}>
+            <input aria-label="New appointment time" type="datetime-local" min={DateTime.now().setZone("Asia/Kolkata").toFormat("yyyy-MM-dd'T'HH:mm")} value={newTime} onChange={(event) => setNewTime(event.target.value)} required />
+            <button className="button small" disabled={busy || !newTime}>Move appointment</button>
+          </form>
+        </details>
+        <button className="button danger small" disabled={busy} onClick={() => void cancel()}>Cancel appointment</button>
+      </>}
+    </div>
+    {message && <p className="action-message" role="status">{message}</p>}
+  </div>;
+}
+
+export function AppointmentCard({ appointment, onChanged }: { appointment: Appointment; onChanged?: () => void }) {
   const { profile } = useAuth();
   const zone = profile!.timezone;
   const therapyEnd = new Date(
@@ -273,16 +326,14 @@ export function AppointmentCard({ appointment }: { appointment: Appointment }) {
           <p>
             {appointment.sessionType} · {appointment.sessionDurationMinutes} min
           </p>
-          <small>
-            Until {formatTime(therapyEnd, zone)} ·{" "}
-            {appointment.bufferDurationMinutes} min protected buffer
-          </small>
+          <small>Session scheduled until {formatTime(therapyEnd, zone)}</small>
         </div>
       </div>
       <span className={`badge ${appointment.status.toLowerCase()}`}>
         {appointment.status.replace("_", " ")}
       </span>
       <JoinSessionButton appointment={appointment} />
+      <AppointmentActions appointment={appointment} onChanged={onChanged} />
     </article>
   );
 }

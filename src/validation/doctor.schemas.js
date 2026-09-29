@@ -76,6 +76,26 @@ export const changePasswordSchema = z.object({ body: z.object({
 }) });
 export const sessionListSchema = z.object({ query: z.object({ ...pagination, status: z.enum(['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'NO_SHOW']).optional() }) });
 
+export const doctorSessionActionSchema = z.object({
+  params: z.object({ id: uuid }),
+  body: z.object({ reason: z.string().trim().max(500).optional() }).default({})
+});
+
+export const doctorRescheduleSchema = z.object({
+  params: z.object({ id: uuid }),
+  body: z.object({ startTime: isoDateTime }).strict()
+});
+
+export const rescheduleRequestListSchema = z.object({ query: z.object({
+  ...pagination,
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED']).optional()
+}) });
+
+export const respondRescheduleSchema = z.object({
+  params: z.object({ id: uuid }),
+  body: z.object({ decision: z.enum(['APPROVE', 'REJECT']) }).strict()
+});
+
 export const payoutListSchema = z.object({ query: z.object({ ...pagination }) });
 export const withdrawSchema = z.object({
   headers: z.object({ 'idempotency-key': z.string().min(8).max(128) }).passthrough(),

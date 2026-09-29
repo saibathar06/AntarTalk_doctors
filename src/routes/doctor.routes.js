@@ -5,10 +5,12 @@ import * as availability from '../services/availability.service.js';
 import * as doctor from '../services/doctor.service.js';
 import * as payouts from '../services/payout.service.js';
 import * as sessions from '../services/session.service.js';
+import * as lifecycle from '../services/bookingLifecycle.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import {
   blockedIdSchema, changePasswordSchema, createBlockedSlotSchema, payoutAccountSchema, payoutListSchema,
-  defaultTimingSchema, presetsSchema, replaceHoursSchema, sessionListSchema, updateProfileSchema, withdrawSchema
+  defaultTimingSchema, doctorRescheduleSchema, doctorSessionActionSchema, presetsSchema, replaceHoursSchema,
+  rescheduleRequestListSchema, respondRescheduleSchema, sessionListSchema, updateProfileSchema, withdrawSchema
 } from '../validation/doctor.schemas.js';
 import { z } from 'zod';
 import { uuid } from '../validation/common.js';
@@ -46,6 +48,7 @@ doctorRouter.post('/change-password', validate(changePasswordSchema), asyncHandl
 }));
 
 doctorRouter.get('/availability', requireVerifiedDoctor, asyncHandler(async (req, res) => res.json({ success: true, data: await availability.getWorkingHours(req.user.doctorProfile.id) })));
+doctorRouter.get('/availability/slots', requireVerifiedDoctor, validate(z.object({ query: z.object({ from: z.coerce.date(), to: z.coerce.date() }).refine((value) => value.from < value.to, { path: ['to'], message: 'to must be after from' }) })), asyncHandler(async (req, res) => res.json({ success: true, data: await availability.previewAvailableSlots(req.user.doctorProfile.id, req.query.from, req.query.to) })));
 doctorRouter.get('/availability/default-timing', requireVerifiedDoctor, asyncHandler(async (req, res) => res.json({ success: true, data: await availability.readDefaultTiming(req.user.doctorProfile.id) })));
 doctorRouter.put('/availability/default-timing', requireVerifiedDoctor, validate(defaultTimingSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await availability.saveDefaultTiming(req.user.id, req.user.doctorProfile.id, req.body.timing) })));
 
@@ -69,6 +72,11 @@ doctorRouter.get('/sessions/upcoming', requireVerifiedDoctor, validate(sessionLi
 doctorRouter.get('/sessions/past', requireVerifiedDoctor, validate(sessionListSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await sessions.listSessions(req.user.doctorProfile.id, { ...req.query, type: 'past' }) })));
 doctorRouter.get('/sessions', requireVerifiedDoctor, validate(sessionListSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await sessions.listSessions(req.user.doctorProfile.id, { ...req.query, type: 'all' }) })));
 doctorRouter.post('/sessions/:id/join', requireVerifiedDoctor, validate(z.object({ params: z.object({ id: uuid }), body: z.object({ surface: z.enum(['WEB', 'MOBILE']).default('WEB') }).default({ surface: 'WEB' }) })), asyncHandler(async (req, res) => res.json({ success: true, data: await sessions.createJoinAccess(req.user.id, req.user.doctorProfile.id, req.params.id, req.body.surface) })));
+doctorRouter.post('/sessions/:id/complete', requireVerifiedDoctor, validate(doctorSessionActionSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await lifecycle.completeDoctorSession(req.user.id, req.user.doctorProfile.id, req.params.id, { ip: req.ip }) })));
+doctorRouter.post('/sessions/:id/cancel', requireVerifiedDoctor, validate(doctorSessionActionSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await lifecycle.cancelDoctorSession(req.user.id, req.user.doctorProfile.id, req.params.id, req.body.reason, { ip: req.ip }) })));
+doctorRouter.post('/sessions/:id/reschedule', requireVerifiedDoctor, validate(doctorRescheduleSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await lifecycle.rescheduleDoctorSession(req.user.id, req.user.doctorProfile.id, req.params.id, req.body, { ip: req.ip }) })));
+doctorRouter.get('/reschedule-requests', requireVerifiedDoctor, validate(rescheduleRequestListSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await lifecycle.listDoctorRescheduleRequests(req.user.doctorProfile.id, req.query) })));
+doctorRouter.post('/reschedule-requests/:id/respond', requireVerifiedDoctor, validate(respondRescheduleSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await lifecycle.respondToReschedule(req.user.id, req.user.doctorProfile.id, req.params.id, req.body.decision, { ip: req.ip }) })));
 
 doctorRouter.get('/sessions/:id', requireVerifiedDoctor, validate(z.object({ params: z.object({ id: uuid }) })), asyncHandler(async (req, res) => res.json({ success: true, data: await sessions.getSession(req.user.doctorProfile.id, req.params.id) })));
 doctorRouter.get('/earnings', requireVerifiedDoctor, asyncHandler(async (req, res) => res.json({ success: true, data: await payouts.earningsSummary(req.user.doctorProfile.id) })));
