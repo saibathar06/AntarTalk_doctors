@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { mkdir, writeFile, unlink, access } from 'node:fs/promises';
+import { unlink, access } from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import sharp from 'sharp';
 import { prisma } from '../lib/prisma.js';
@@ -46,28 +46,25 @@ export async function saveUpload(userId, doctorId, file, document = false) {
     extension = 'jpg';
   }
   const filename = `${crypto.randomUUID()}.${extension}`;
-  const directory = path.join(uploadRoot, userId);
-  if (document) {
-    await mkdir(directory, { recursive: true });
-    await writeFile(path.join(directory, filename), data, { flag: 'wx', mode: 0o600 });
-  }
   const url = `/api/doctor/files/${filename}`;
   let oldUrl;
-  try {
-    await prisma.$transaction(async (tx) => {
-      await lockUser(tx, userId);
-      await lockDoctor(tx, doctorId);
-      const doctor = await tx.doctorProfile.findUnique({ where: { userId } });
-      if (!doctor) throw new AppError(404, 'DOCTOR_NOT_FOUND', 'Doctor profile not found.');
-      if (document && doctor.verificationStatus === 'VERIFIED') {
-        throw new AppError(403, 'VERIFIED_CREDENTIALS_LOCKED', 'Verified credentials are locked. Contact AntarTalk support to correct a registration document.');
-      }
-      oldUrl = document ? doctor.licenseDocumentUrl : doctor.profileImageUrl;
-      if (!document) await tx.doctorPhoto.upsert({ where: { doctorId }, create: { doctorId, data }, update: { data } });
-      await tx.doctorProfile.update({ where: { userId }, data: document ? { licenseDocumentUrl: url, verificationStatus: 'PENDING', verificationSubmittedAt: null, verificationReason: null, isAcceptingBookings: false } : { profileImageUrl: url } });
-      await recordAudit({ actorId: userId, action: document ? 'LICENSE_DOCUMENT_UPDATED' : 'PROFILE_PHOTO_UPDATED', entityType: 'DoctorProfile', entityId: doctorId }, tx);
-    });
-  } catch (error) { if (document) await unlink(path.join(directory, filename)).catch(() => {}); throw error; }
+  await prisma.$transaction(async (tx) => {
+    await lockUser(tx, userId);
+    await lockDoctor(tx, doctorId);
+    const doctor = await tx.doctorProfile.findUnique({ where: { userId } });
+    if (!doctor) throw new AppError(404, 'DOCTOR_NOT_FOUND', 'Doctor profile not found.');
+    if (document && doctor.verificationStatus === 'VERIFIED') {
+      throw new AppError(403, 'VERIFIED_CREDENTIALS_LOCKED', 'Verified credentials are locked. Contact AntarTalk support to correct a registration document.');
+    }
+    oldUrl = document ? doctor.licenseDocumentUrl : doctor.profileImageUrl;
+    if (document) {
+      await tx.doctorCredentialDocument.upsert({ where: { doctorId }, create: { doctorId, data }, update: { data } });
+    } else {
+      await tx.doctorPhoto.upsert({ where: { doctorId }, create: { doctorId, data }, update: { data } });
+    }
+    await tx.doctorProfile.update({ where: { userId }, data: document ? { licenseDocumentUrl: url, verificationStatus: 'PENDING', verificationSubmittedAt: null, verificationReason: null, isAcceptingBookings: false } : { profileImageUrl: url } });
+    await recordAudit({ actorId: userId, action: document ? 'LICENSE_DOCUMENT_UPDATED' : 'PROFILE_PHOTO_UPDATED', entityType: 'DoctorProfile', entityId: doctorId }, tx);
+  }, { timeout: env.BOOKING_TRANSACTION_TIMEOUT_MS, maxWait: 5000 });
   if (oldUrl) await removeStoredUpload(userId, oldUrl);
   return { url };
 }
@@ -79,6 +76,10 @@ export async function readUpload(userId, filename) {
     const photo = await prisma.doctorPhoto.findUnique({ where: { doctorId: doctor.id } });
     if (photo) return Buffer.from(photo.data);
   }
+  if (url === doctor.licenseDocumentUrl) {
+    const document = await prisma.doctorCredentialDocument.findUnique({ where: { doctorId: doctor.id } });
+    if (document) return Buffer.from(document.data);
+  }
   const file = path.join(uploadRoot, userId, filename);
   try {
     await access(file, fsConstants.R_OK);
@@ -89,9 +90,11 @@ export async function readUpload(userId, filename) {
 }
 
 export async function readAdminLicenseDocument(doctorId) {
-  const doctor = await prisma.doctorProfile.findUnique({ where: { id: doctorId }, select: { userId: true, licenseDocumentUrl: true } });
+  const doctor = await prisma.doctorProfile.findUnique({ where: { id: doctorId }, select: { id: true, userId: true, licenseDocumentUrl: true } });
   const filename = doctor?.licenseDocumentUrl ? path.basename(doctor.licenseDocumentUrl) : '';
   if (!doctor || !/^[a-f0-9-]{36}\.(jpg|pdf)$/.test(filename)) throw new AppError(404, 'FILE_NOT_FOUND', 'Credential document not found.');
+  const document = await prisma.doctorCredentialDocument.findUnique({ where: { doctorId: doctor.id } });
+  if (document) return Buffer.from(document.data);
   const file = path.join(uploadRoot, doctor.userId, filename);
   try {
     await access(file, fsConstants.R_OK);

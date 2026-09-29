@@ -27,6 +27,11 @@ adminRouter.patch('/doctors/:id/verification', validate(decision), asyncHandler(
 adminRouter.get('/doctors/:id/license-document', validate(reviewId), asyncHandler(async (req, res) => {
   const file = await readAdminLicenseDocument(req.params.id);
   res.set('Content-Security-Policy', "default-src 'none'; sandbox");
+  if (Buffer.isBuffer(file)) {
+    const pdf = file.subarray(0, 5).toString() === '%PDF-';
+    res.set('Content-Disposition', `attachment; filename="credential-document.${pdf ? 'pdf' : 'jpg'}"`);
+    return res.type(pdf ? 'application/pdf' : 'image/jpeg').send(file);
+  }
   res.sendFile(file, { dotfiles: 'deny', headers: { 'Content-Disposition': 'attachment' } }, (error) => { if (error && !res.headersSent) res.status(404).json({ success: false, error: { code: 'FILE_NOT_FOUND', message: 'Credential document not found.' } }); });
 }));
 const payoutReview = z.object({ params: z.object({ id: uuid }), body: z.object({

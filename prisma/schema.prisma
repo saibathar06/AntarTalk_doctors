@@ -193,6 +193,7 @@ model DoctorProfile {
   workingHours             DoctorWorkingHour[]
   availabilityPresets      Json                 @default("[]")
   photo                    DoctorPhoto?
+  credentialDocument       DoctorCredentialDocument?
   blockedSlots             DoctorBlockedSlot[]
   bookings                 Booking[]
   earnings                 Earning[]
@@ -202,6 +203,14 @@ model DoctorProfile {
   penalties                DoctorPenalty[]
 
   @@index([verificationStatus, isAcceptingBookings])
+}
+
+model DoctorCredentialDocument {
+  doctorId  String        @id @db.Uuid
+  data      Bytes
+  createdAt DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime      @updatedAt @db.Timestamptz(3)
+  doctor    DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
 }
 
 model OtpChallenge {

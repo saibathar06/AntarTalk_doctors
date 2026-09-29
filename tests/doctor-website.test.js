@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 vi.mock('../src/lib/prisma.js', () => ({ prisma: {
   doctorProfile: { findUnique: vi.fn() }, booking: { findMany: vi.fn(), count: vi.fn(), groupBy: vi.fn() }, $queryRaw: vi.fn()
-  , doctorPhoto: { findUnique: vi.fn() }
+  , doctorPhoto: { findUnique: vi.fn() }, doctorCredentialDocument: { findUnique: vi.fn() }
 } }));
 import { prisma } from '../src/lib/prisma.js';
 import { profileCompletion, canDoctorTakeSessions } from '../src/services/eligibility.service.js';
@@ -17,7 +17,7 @@ const doctor = {
   licenseNumber: 'TEST', qualification: 'MSc', experienceYears: 0, consultationFee: 1200, bio: 'About care', languages: ['English'], preferredSessionLanguage: 'English', expertise: ['Anxiety'],
   verificationStatus: 'VERIFIED', isAcceptingBookings: true, user: { role: 'DOCTOR', accountStatus: 'ACTIVE', emailVerifiedAt: new Date() }
 };
-beforeEach(() => { vi.clearAllMocks(); prisma.doctorProfile.findUnique.mockResolvedValue(doctor); });
+beforeEach(() => { vi.clearAllMocks(); prisma.doctorProfile.findUnique.mockResolvedValue(doctor); prisma.doctorCredentialDocument.findUnique.mockResolvedValue(null); });
 describe('server-derived profile and eligibility', () => {
   it('accepts zero years experience and calculates all required fields', () => expect(profileCompletion(doctor)).toEqual({ profileCompleted: true, completionPercentage: 100, missingFields: [] }));
   it.each(['firstName', 'profileImageUrl', 'professionalCategory', 'qualification', 'licenseNumber', 'bio', 'languages', 'preferredSessionLanguage', 'expertise'])('rejects incomplete %s', (field) => expect(canDoctorTakeSessions({ ...doctor, [field]: null })).toBe(false));

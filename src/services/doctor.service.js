@@ -120,6 +120,7 @@ export async function deleteAccount(userId, context = {}) {
     await tx.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } });
     await tx.doctorWorkingHour.updateMany({ where: { doctorId: profile.id }, data: { isActive: false } });
     await tx.doctorPhoto.deleteMany({ where: { doctorId: profile.id } });
+    await tx.doctorCredentialDocument.deleteMany({ where: { doctorId: profile.id } });
     await tx.doctorProfile.update({
       where: { id: profile.id },
       data: {
