@@ -17,7 +17,7 @@ ALTER TABLE "BookingEmail"
   ADD COLUMN "kind" VARCHAR(40) NOT NULL DEFAULT 'CONFIRMATION',
   ADD COLUMN "eventKey" VARCHAR(80) NOT NULL DEFAULT 'initial',
   ADD COLUMN "eventData" JSONB;
-DROP INDEX "BookingEmail_bookingId_audience_key";
+ALTER TABLE "BookingEmail" DROP CONSTRAINT "BookingEmail_bookingId_audience_key";
 CREATE UNIQUE INDEX "BookingEmail_bookingId_audience_kind_eventKey_key"
   ON "BookingEmail"("bookingId", "audience", "kind", "eventKey");
 
