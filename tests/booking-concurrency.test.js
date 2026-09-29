@@ -92,6 +92,29 @@ describe('booking retry regressions', () => {
     await expect(confirmBooking('client', input, 'key')).rejects.toMatchObject({ code: 'SLOT_UNAVAILABLE' });
     expect(bookings).toHaveLength(0);
   });
+  it('recovers a provider-captured payment after its Redis hold expires', async () => {
+    readOwnedReservation.mockRejectedValue(Object.assign(new Error('expired'), { code: 'RESERVATION_EXPIRED' }));
+    await expect(confirmBooking('client', input, 'recovery-key', { allowCapturedPaymentRecovery: true })).resolves.toMatchObject({ id: 'booking' });
+    expect(bookings).toHaveLength(1);
+    expect(bookings[0].reservationExpiresAt).toBeNull();
+  });
+  it('does not bypass an expired hold for an ordinary confirmation request', async () => {
+    readOwnedReservation.mockRejectedValue(Object.assign(new Error('expired'), { code: 'RESERVATION_EXPIRED' }));
+    await expect(confirmBooking('client', input, 'ordinary-key')).rejects.toMatchObject({ code: 'RESERVATION_EXPIRED' });
+    expect(bookings).toHaveLength(0);
+  });
+  it('retries a timed-out booking transaction with the same idempotent work', async () => {
+    const transaction = prisma.$transaction;
+    let calls = 0;
+    prisma.$transaction = (work, options) => {
+      calls += 1;
+      if (calls === 1) return Promise.reject(Object.assign(new Error('transaction expired'), { code: 'P2028' }));
+      return transaction(work, options);
+    };
+    await expect(confirmBooking('client', input, 'timeout-key')).resolves.toMatchObject({ id: 'booking' });
+    expect(calls).toBe(2);
+    expect(bookings).toHaveLength(1);
+  });
 });
 describe('withdrawal retry regressions', () => {
   const request = { amount: 800, currency: 'INR', payoutAccountId: 'account' };

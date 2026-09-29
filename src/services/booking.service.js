@@ -14,7 +14,7 @@ const bookingSelect = {
   clientName: true, clientAge: true
 };
 
-export async function confirmBooking(clientId, input, idempotencyKey) {
+export async function confirmBooking(clientId, input, idempotencyKey, context = {}) {
   const requestHash = stableHash({ ...input, startTime: input.startTime.toISOString() });
   const existing = await prisma.idempotencyRecord.findUnique({
     where: { userId_scope_key: { userId: clientId, scope: 'BOOKING_CONFIRM', key: idempotencyKey } }
@@ -25,6 +25,11 @@ export async function confirmBooking(clientId, input, idempotencyKey) {
   }
 
   let reservation;
+  try {
+    reservation = await readOwnedReservation(clientId, input);
+  } catch (error) {
+    if (!context.allowCapturedPaymentRecovery) throw error;
+  }
   let booking;
   try {
     booking = await serialTransaction(async (tx) => {
@@ -41,9 +46,14 @@ export async function confirmBooking(clientId, input, idempotencyKey) {
         select: { userId: true, firstName: true, lastName: true }
       });
       if (!doctor) throw new AppError(404, 'DOCTOR_NOT_FOUND', 'Doctor not found.');
-      reservation = await readOwnedReservation(clientId, input);
+      try {
+        reservation = await readOwnedReservation(clientId, input);
+      } catch (error) {
+        if (!context.allowCapturedPaymentRecovery) throw error;
+        reservation = null;
+      }
       const slot = await assertStructurallyBookable(input.doctorId, input.startTime, tx);
-      if (reservation.value.endTime !== slot.endTime.toISOString()) throw new AppError(409, 'SLOT_UNAVAILABLE', 'The appointment window changed.');
+      if (reservation && reservation.value.endTime !== slot.endTime.toISOString()) throw new AppError(409, 'SLOT_UNAVAILABLE', 'The appointment window changed.');
       await tx.$queryRaw`SELECT id FROM "Payment" WHERE id = ${input.paymentId}::uuid FOR UPDATE`;
       const payment = await tx.payment.findUnique({ where: { id: input.paymentId }, include: { booking: { select: { id: true } } } });
       validatePayment(payment, clientId, slot);
@@ -59,7 +69,7 @@ export async function confirmBooking(clientId, input, idempotencyKey) {
           bufferDurationMinutes: scheduling.bufferDurationMinutes,
           status: 'CONFIRMED',
           paymentId: input.paymentId,
-          reservationExpiresAt: new Date(reservation.value.expiresAt)
+          reservationExpiresAt: reservation ? new Date(reservation.value.expiresAt) : null
         },
         select: bookingSelect
       });
@@ -76,9 +86,8 @@ export async function confirmBooking(clientId, input, idempotencyKey) {
         opensAt: new Date(created.startTime.getTime() - env.JOIN_EARLY_MINUTES * 60_000),
         closesAt: new Date(created.startTime.getTime() + created.sessionDurationMinutes * 60_000)
       } });
-      await readOwnedReservation(clientId, input);
       return created;
-    });
+    }, { timeout: env.BOOKING_TRANSACTION_TIMEOUT_MS, maxWait: 5000, retryOnTimeout: true });
   } catch (error) {
     if (['P2002', 'P2004', 'P2034'].includes(error.code) || String(error.message).includes('Booking_doctor_no_overlap')) {
       const replay = await prisma.idempotencyRecord.findUnique({ where: { userId_scope_key: { userId: clientId, scope: 'BOOKING_CONFIRM', key: idempotencyKey } } });
@@ -88,6 +97,7 @@ export async function confirmBooking(clientId, input, idempotencyKey) {
       }
     }
     if (String(error.message).includes('RESERVATION_EXPIRED')) throw new AppError(409, 'RESERVATION_EXPIRED', 'The temporary reservation has expired.');
+    if (error.code === 'P2028') throw new AppError(503, 'BOOKING_CONFIRMATION_RETRY_REQUIRED', 'Payment was received, but booking confirmation is still pending. Retry confirmation with the same idempotency key.');
     if (error.code === 'P2002' || error.code === 'P2004' || String(error.message).includes('Booking_doctor_no_overlap') || String(error.message).includes('Booking_client_no_overlap')) {
       throw new AppError(409, 'SLOT_ALREADY_BOOKED', 'This appointment window has already been booked.');
     }

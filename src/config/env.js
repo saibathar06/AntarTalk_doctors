@@ -35,6 +35,7 @@ const schema = z.object({
   OTP_MAX_ATTEMPTS: z.coerce.number().int().positive().default(5),
   OTP_RESEND_COOLDOWN_SECONDS: z.coerce.number().int().positive().default(60),
   RESERVATION_TTL_SECONDS: z.coerce.number().int().positive().default(180),
+  BOOKING_TRANSACTION_TIMEOUT_MS: z.coerce.number().int().min(5000).max(30000).default(20000),
   SESSION_DURATION_MINUTES: z.coerce.number().int().positive().default(40),
   BUFFER_DURATION_MINUTES: z.coerce.number().int().nonnegative().default(20),
   SLOT_INTERVAL_MINUTES: z.coerce.number().int().positive().default(60),

@@ -56,11 +56,12 @@ RAZORPAY_KEY_SECRET=your-razorpay-test-key-secret
 RAZORPAY_WEBHOOK_SECRET=your-razorpay-webhook-secret
 RAZORPAY_CURRENCY=INR
 PLATFORM_COMMISSION_PERCENT=20
+BOOKING_TRANSACTION_TIMEOUT_MS=20000
 ```
 
 CAPTCHA is currently removed. Password validation, email OTP, resend cooldowns and authentication rate limits remain enabled. No CAPTCHA environment variables are required.
 
-Razorpay orders are created by the API from the doctor’s stored `consultationFee`; clients never submit an amount or commission. The server verifies the returned checkout signature and captured payment before it confirms the existing Redis-held booking. Configure a Razorpay webhook at `POST /api/payments/razorpay/webhook` with the same webhook secret. The webhook is signed and records capture status, but it never creates a booking by itself.
+Razorpay orders are created by the API from the doctor’s stored `consultationFee`; clients never submit an amount or commission. The server verifies the returned checkout signature and captured payment before confirming the booking. Normal confirmation requires the existing Redis hold. If the hold expires after Razorpay captures payment, the trusted provider-confirmation path may recover the booking from the payment's server-bound client, doctor and UTC slot data; PostgreSQL overlap constraints remain authoritative. `BOOKING_TRANSACTION_TIMEOUT_MS` bounds the serializable confirmation transaction and defaults to 20 seconds. Configure a Razorpay webhook at `POST /api/payments/razorpay/webhook` with the same webhook secret. The webhook is signed and records capture status, but it never creates a booking by itself.
 
 ## How it works
 

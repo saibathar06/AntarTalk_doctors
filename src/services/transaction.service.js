@@ -8,14 +8,19 @@ export async function lockUser(tx, userId) {
   return user;
 }
 
-export async function serialTransaction(work) {
+export async function serialTransaction(work, options = {}) {
   for (let attempt = 0; ; attempt += 1) {
     try {
-      return await prisma.$transaction(work, { isolationLevel: 'Serializable', timeout: 5000, maxWait: 3000 });
+      return await prisma.$transaction(work, {
+        isolationLevel: 'Serializable',
+        timeout: options.timeout ?? 5000,
+        maxWait: options.maxWait ?? 3000
+      });
     } catch (error) {
       // A concurrent idempotency insert may surface as a uniqueness error rather
       // than SSI failure. Retrying the whole rolled-back transaction sees its result.
-      if (!['P2034', 'P2002'].includes(error.code) || attempt >= 2) throw error;
+      const retryable = ['P2034', 'P2002'].includes(error.code) || (options.retryOnTimeout && error.code === 'P2028');
+      if (!retryable || attempt >= 2) throw error;
     }
   }
 }

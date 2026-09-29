@@ -141,7 +141,7 @@ export async function verifyRazorpayPayment(clientId, input, idempotencyKey) {
     paymentId: payment.id,
     clientName: input.clientName,
     clientAge: input.clientAge
-  }, idempotencyKey);
+  }, idempotencyKey, { allowCapturedPaymentRecovery: true });
 }
 
 export async function handleRazorpayWebhook(rawBody, signature) {
