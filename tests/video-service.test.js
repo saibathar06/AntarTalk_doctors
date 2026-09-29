@@ -54,6 +54,15 @@ describe('trusted video integration', () => {
     expect(JSON.parse(request.body)).toMatchObject({ appointmentId: 'booking', doctorId: 'doctor-user', clientId: 'client-user' });
   });
 
+  it('accepts the deployed video service id field for backward compatibility', async () => {
+    prisma.booking.findUnique.mockResolvedValue({ ...structuredClone(booking), videoCall: { ...booking.videoCall, state: 'PENDING', serviceSessionId: null } });
+    globalThis.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'legacy-session-id' }) });
+    await provisionVideoCall('booking');
+    expect(prisma.videoCall.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ serviceSessionId: 'legacy-session-id', state: 'SCHEDULED' })
+    }));
+  });
+
   it('reads only trusted attendance summaries from the video service', async () => {
     globalThis.fetch.mockResolvedValueOnce({ ok: true, json: async () => ({ attendance: {
       doctor: { firstJoinedAt: '2030-01-02T04:30:00Z' },

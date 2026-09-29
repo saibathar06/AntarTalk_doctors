@@ -4,13 +4,10 @@ import { ClockIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { api, mutate } from "../api";
 import { useAuth } from "../auth";
 import {
-  EmptyState,
   ErrorState,
   LoadingState,
   PageHeader,
   TransitionLoader,
-  formatDate,
-  formatTime,
   useResource,
 } from "../components";
 import type { Block, BookingSlot, WorkingHour } from "../types";
@@ -19,12 +16,10 @@ type DefaultTiming = { startTime: string; endTime: string };
 export function AvailabilityPage() {
   const { profile, reload } = useAuth();
   const today = DateTime.now().setZone("Asia/Kolkata").startOf("day");
-  const [slotDate, setSlotDate] = useState(today.toISODate()!);
   const hours = useResource<WorkingHour[]>("/api/doctor/availability");
   const blocks = useResource<Block[]>("/api/doctor/blocked-slots");
   const timing = useResource<DefaultTiming | null>("/api/doctor/availability/default-timing");
-  const slotDay = DateTime.fromISO(slotDate, { zone: "Asia/Kolkata" }).startOf("day");
-  const slots = useResource<BookingSlot[]>(`/api/doctor/availability/slots?from=${encodeURIComponent(slotDay.toUTC().toISO()!)}&to=${encodeURIComponent(slotDay.plus({ days: 1 }).toUTC().toISO()!)}`);
+  const slots = useResource<BookingSlot[]>(`/api/doctor/availability/slots?from=${encodeURIComponent(today.toUTC().toISO()!)}&to=${encodeURIComponent(today.plus({ days: 7 }).toUTC().toISO()!)}`);
   async function saveDefault(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
@@ -75,47 +70,6 @@ export function AvailabilityPage() {
       setBusyLabel("");
     }
   }
-  async function block(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const values = Object.fromEntries(new FormData(form));
-    setBusy(true);
-    setBusyLabel("Saving your unavailable period…");
-    setError("");
-    try {
-      const start = DateTime.fromISO(String(values.startTime), {
-          zone: "Asia/Kolkata",
-        }),
-        end = DateTime.fromISO(String(values.endTime), {
-          zone: "Asia/Kolkata",
-        });
-      if (
-        !start.isValid ||
-        !end.isValid ||
-        start.toFormat("yyyy-MM-dd'T'HH:mm") !== values.startTime ||
-        end.toFormat("yyyy-MM-dd'T'HH:mm") !== values.endTime ||
-        start.getPossibleOffsets().length !== 1 ||
-        end.getPossibleOffsets().length !== 1
-      )
-        throw new Error(
-          "Choose a valid India Standard Time.",
-        );
-      await mutate("/api/doctor/blocked-slots", "POST", {
-        startTime: start.toUTC().toISO(),
-        endTime: end.toUTC().toISO(),
-        reason: values.reason,
-      });
-      blocks.reload();
-      slots.reload();
-      form.reset();
-      setNotice("Unavailable period saved.");
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-      setBusyLabel("");
-    }
-  }
   async function remove(id: string) {
     setBusy(true);
     setBusyLabel("Removing your unavailable period…");
@@ -152,7 +106,8 @@ export function AvailabilityPage() {
     });
   }
   async function blockGeneratedSlot(slot: BookingSlot) {
-    if (!window.confirm(`Block the ${DateTime.fromISO(slot.startTime, { zone: "utc" }).setZone("Asia/Kolkata").toFormat("h:mm a")} appointment on ${slotDay.toFormat("d LLL")}?`)) return;
+    const localStart = DateTime.fromISO(slot.startTime, { zone: "utc" }).setZone("Asia/Kolkata");
+    if (!window.confirm(`Block the ${localStart.toFormat("h:mm a")} appointment on ${localStart.toFormat("d LLL")}?`)) return;
     setBusy(true);
     setBusyLabel("Blocking this appointment time…");
     setError("");
@@ -170,6 +125,7 @@ export function AvailabilityPage() {
       dayOfWeek: date.weekday,
       dayName: date.toFormat("cccc"),
       dateLabel: date.toFormat("ccc, d LLL"),
+      dateKey: date.toISODate()!,
       isToday: offset === 0,
     };
   });
@@ -177,7 +133,7 @@ export function AvailabilityPage() {
     <>
       <PageHeader
         title="Your time. Your rhythm."
-        description={`Today is ${today.toFormat("cccc, d LLLL yyyy")} in India Standard Time. Choose the times clients can book, then protect specific time away when needed.`}
+        description={`Today is ${today.toFormat("cccc, d LLLL yyyy")} in India Standard Time. Set your hours, review the generated appointment times, and block any slot you cannot take.`}
       />
       <ErrorState message={error || hours.error || blocks.error} />
       {profile!.timezone !== "Asia/Kolkata" && <p className="alert">Your previous schedule used another timezone. Set fresh dated hours in IST and save them before clients can book new sessions. Existing appointments keep their original UTC times.</p>}
@@ -214,8 +170,10 @@ export function AvailabilityPage() {
           {hours.loading ? (
             <LoadingState />
           ) : (
-            visibleDays.map((day) => (
-              <section className={`day-row ${day.isToday ? "today" : ""}`} key={`${day.dayOfWeek}-${day.dateLabel}`}>
+            visibleDays.map((day) => {
+              const daySlots = (slots.data ?? []).filter((slot) => DateTime.fromISO(slot.startTime, { zone: "utc" }).setZone("Asia/Kolkata").toISODate() === day.dateKey);
+              const dayBlocks = (blocks.data ?? []).filter((item) => DateTime.fromISO(item.startTime, { zone: "utc" }).setZone("Asia/Kolkata").toISODate() === day.dateKey);
+              return <section className={`day-row ${day.isToday ? "today" : ""}`} key={`${day.dayOfWeek}-${day.dateLabel}`}>
                 <div className="day-heading">
                   <strong>{day.isToday ? "Today" : day.dayName}</strong>
                   <span>{day.dateLabel}</span>
@@ -290,9 +248,36 @@ export function AvailabilityPage() {
                       <PlusIcon size={16} /> Add custom timing
                     </button>
                   </div>
+                  <div className="day-slot-panel">
+                    <div className="day-slot-heading">
+                      <div>
+                        <strong>Generated appointment times</strong>
+                        <span>These are the live times clients can book after you save your hours.</span>
+                      </div>
+                      <small>{daySlots.length} available{dayBlocks.length ? ` · ${dayBlocks.length} blocked` : ""}</small>
+                    </div>
+                    {slots.loading || blocks.loading ? <LoadingState label="Generating appointment times…" /> : (
+                      <div className="day-slot-grid" aria-label={`${day.dayName} appointment times`}>
+                        {daySlots.map((slot) => {
+                          const time = DateTime.fromISO(slot.startTime, { zone: "utc" }).setZone("Asia/Kolkata").toFormat("h:mm a");
+                          return <button type="button" disabled={busy} key={slot.startTime} aria-label={`Block ${day.dayName} ${time}`} onClick={() => void blockGeneratedSlot(slot)}>
+                            <ClockIcon /> <strong>{time}</strong><small>Available · select to block</small>
+                          </button>;
+                        })}
+                        {dayBlocks.map((item) => {
+                          const start = DateTime.fromISO(item.startTime, { zone: "utc" }).setZone("Asia/Kolkata");
+                          const end = DateTime.fromISO(item.endTime, { zone: "utc" }).setZone("Asia/Kolkata");
+                          return <button type="button" disabled={busy} className="blocked" key={item.id} aria-label={`Unblock ${day.dayName} ${start.toFormat("h:mm a")}`} onClick={() => void remove(item.id)}>
+                            <ClockIcon /> <strong>{start.toFormat("h:mm a")}</strong><small>Blocked until {end.toFormat("h:mm a")} · select to unblock</small>
+                          </button>;
+                        })}
+                        {!daySlots.length && !dayBlocks.length && <p className="day-slot-empty">No appointment times generated for this day.</p>}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </section>
-            ))
+              </section>;
+            })
           )}
           <div className="form-footer">
             <p className="help">
@@ -304,83 +289,6 @@ export function AvailabilityPage() {
           </div>
         </fieldset>
       </form>
-      <section className="card">
-        <h2>Time away</h2>
-        <p>
-           Pick one of your generated appointment times to block it instantly, or enter a custom period for leave, meetings, or personal time. Existing bookings cannot be blocked.
-        </p>
-        <div className="date-picker compact-date-picker" aria-label="Dates for available appointment times">
-          {visibleDays.map((day, index) => {
-            const date = today.plus({ days: index });
-            const key = date.toISODate()!;
-            return <button type="button" key={key} className={slotDate === key ? "selected" : ""} onClick={() => setSlotDate(key)}>
-              <small>{day.isToday ? "Today" : date.toFormat("ccc")}</small><strong>{date.toFormat("d")}</strong><span>{date.toFormat("LLL")}</span>
-            </button>;
-          })}
-        </div>
-        <div className="available-slot-preview">
-          <h3>Available appointment times</h3>
-          <p className="help">These are the same live times clients can currently choose. Select one to make it unavailable.</p>
-          {slots.loading ? <LoadingState label="Generating appointment times…" /> : slots.data?.length ? (
-            <div className="slot-grid">
-              {slots.data.map((slot) => <button type="button" disabled={busy} key={slot.startTime} onClick={() => void blockGeneratedSlot(slot)}>
-                <ClockIcon /> {DateTime.fromISO(slot.startTime, { zone: "utc" }).setZone("Asia/Kolkata").toFormat("h:mm a")}
-                <small>Available · select to block</small>
-              </button>)}
-            </div>
-          ) : <EmptyState title="No available appointment times">Save working hours above, or choose another day.</EmptyState>}
-        </div>
-        <h3>Block a custom period</h3>
-        <form onSubmit={block}>
-          <fieldset disabled={busy}>
-            <div className="form-grid">
-              <label>
-                From
-                <input name="startTime" type="datetime-local" required />
-              </label>
-              <label>
-                Until
-                <input name="endTime" type="datetime-local" required />
-              </label>
-              <label>
-                Reason (optional)
-                <input name="reason" maxLength={500} />
-              </label>
-            </div>
-            <button className="button secondary">Block time</button>
-          </fieldset>
-        </form>
-        <div className="blocked-list">
-          {blocks.data?.length ? (
-            blocks.data.map((item) => (
-              <div className="blocked-item" key={item.id}>
-                <div>
-                  <strong>
-                    {formatDate(item.startTime, "Asia/Kolkata")} ·{" "}
-                    {formatTime(item.startTime, "Asia/Kolkata")}
-                  </strong>
-                  <p>
-                    Until {formatDate(item.endTime, "Asia/Kolkata")} ·{" "}
-                    {formatTime(item.endTime, "Asia/Kolkata")}
-                  </p>
-                  <small>{item.reason}</small>
-                </div>
-                <button
-                  disabled={busy}
-                  className="button secondary small"
-                  onClick={() => remove(item.id)}
-                >
-                  Unblock
-                </button>
-              </div>
-            ))
-          ) : (
-            <EmptyState title="No time away scheduled">
-              Add a blocked period whenever you need a break.
-            </EmptyState>
-          )}
-        </div>
-      </section>
       {busy && <TransitionLoader label={busyLabel || "Updating availability…"} />}
     </>
   );

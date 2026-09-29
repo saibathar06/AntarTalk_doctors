@@ -350,6 +350,13 @@
     width: 100%;
     margin-top: 5px;
   }
+  .day-slot-heading {
+    flex-direction: column;
+    gap: 5px;
+  }
+  .day-slot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .time-window input[type="time"] {
     width: 105px;
   }

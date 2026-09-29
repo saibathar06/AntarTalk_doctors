@@ -79,10 +79,11 @@ export async function provisionVideoCall(bookingId, db = prisma) {
     opensAt: booking.videoCall.opensAt.toISOString(),
     closesAt: booking.videoCall.closesAt.toISOString()
   });
-  if (!payload?.sessionId) throw new AppError(502, 'VIDEO_SERVICE_INVALID_RESPONSE', 'Video calling is temporarily unavailable.');
+  const serviceSessionId = payload?.sessionId ?? payload?.id;
+  if (typeof serviceSessionId !== 'string' || !serviceSessionId) throw new AppError(502, 'VIDEO_SERVICE_INVALID_RESPONSE', 'Video calling is temporarily unavailable.');
   return db.videoCall.update({
     where: { bookingId },
-    data: { serviceSessionId: String(payload.sessionId), state: 'SCHEDULED', lastErrorCode: null },
+    data: { serviceSessionId, state: 'SCHEDULED', lastErrorCode: null },
   });
 }
 
@@ -134,7 +135,7 @@ export async function processVideoProvisioning(db = prisma) {
     catch (error) { logger.warn({ bookingId: call.bookingId, errorCode: error.code ?? 'VIDEO_ERROR' }, 'Expired video session cleanup failed'); }
   }
   const jobs = await db.videoCall.findMany({
-    where: { state: { in: ['PENDING', 'FAILED'] }, attempts: { lt: 10 }, nextAttemptAt: { lte: new Date() }, booking: { status: 'CONFIRMED' } },
+    where: { state: { in: ['PENDING', 'FAILED'] }, attempts: { lt: 10 }, nextAttemptAt: { lte: new Date() }, closesAt: { gt: new Date() }, booking: { status: 'CONFIRMED' } },
     select: { id: true, bookingId: true, attempts: true }, take: 25, orderBy: { nextAttemptAt: 'asc' }
   });
   for (const job of jobs) {

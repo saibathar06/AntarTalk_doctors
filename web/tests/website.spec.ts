@@ -57,7 +57,7 @@ async function mockWorkspace(page: Page, doctorProfile = profile) {
                 averageRating: null,
                 schedule: empty,
               }
-            : path.endsWith("/availability") || path.endsWith("/blocked-slots") || path.endsWith("/availability/presets")
+            : path.endsWith("/availability") || path.endsWith("/availability/slots") || path.endsWith("/blocked-slots") || path.endsWith("/availability/presets")
               ? []
               : empty;
     await route.fulfill({ json: { success: true, data } });
@@ -312,6 +312,43 @@ test("default timing applies to seven days and permits a custom daily override",
   const rows = (await request).postDataJSON().windows;
   expect(rows.filter((row: { useDefault: boolean }) => row.useDefault)).toHaveLength(6);
   expect(rows[0]).toMatchObject({ startTime: "10:00", endTime: "15:00", useDefault: false });
+});
+
+test("generated slots stay inside their day card and can be blocked or unblocked there", async ({ page }) => {
+  await mockWorkspace(page, { ...profile, verificationStatus: "VERIFIED", isAcceptingBookings: true });
+  const date = DateTime.now().setZone("Asia/Kolkata").startOf("day").plus({ days: 1 });
+  const startTime = date.set({ hour: 10 }).toUTC().toISO()!;
+  const endTime = date.set({ hour: 11 }).toUTC().toISO()!;
+  let blocked: null | { id: string; startTime: string; endTime: string; reason: string } = null;
+  await page.route("**/api/doctor/availability/slots?*", (route) => route.fulfill({ json: {
+    success: true,
+    data: blocked ? [] : [{ doctorId: profile.id, startTime, endTime, sessionDurationMinutes: 40, bufferDurationMinutes: 20 }]
+  } }));
+  await page.route("**/api/doctor/blocked-slots", async (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON();
+      blocked = { id: "block-one", ...body };
+      return route.fulfill({ status: 201, json: { success: true, data: blocked } });
+    }
+    return route.fulfill({ json: { success: true, data: blocked ? [blocked] : [] } });
+  });
+  await page.route("**/api/doctor/blocked-slots/block-one", async (route) => {
+    blocked = null;
+    return route.fulfill({ json: { success: true, data: { deleted: true } } });
+  });
+
+  await page.goto("/doctor/availability");
+  const dayName = date.toFormat("cccc");
+  const row = page.locator(".day-row").nth(1);
+  await expect(row.getByText("Generated appointment times")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Time away" })).toHaveCount(0);
+  page.once("dialog", (dialog) => dialog.accept());
+  const create = page.waitForRequest((request) => request.url().endsWith("/api/doctor/blocked-slots") && request.method() === "POST");
+  await row.getByRole("button", { name: `Block ${dayName} 10:00 AM` }).click();
+  expect((await create).postDataJSON()).toEqual({ startTime, endTime, reason: "Unavailable appointment time" });
+  await expect(row.getByRole("button", { name: `Unblock ${dayName} 10:00 AM` })).toBeVisible();
+  await row.getByRole("button", { name: `Unblock ${dayName} 10:00 AM` }).click();
+  await expect(row.getByRole("button", { name: `Block ${dayName} 10:00 AM` })).toBeVisible();
 });
 
 test("sign-in requests an email code and keeps tokens out of browser storage", async ({
