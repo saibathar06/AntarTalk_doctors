@@ -21,7 +21,10 @@ beforeEach(() => {
   Object.assign(prisma, {
     bookingEmail: { createMany: vi.fn(async ({ data }) => { emails.push(...data); return { count: data.length }; }) },
     $queryRaw: vi.fn(),
-    user: { findUnique: vi.fn(async () => ({ id: 'client', role: 'CLIENT', accountStatus: 'ACTIVE', emailVerifiedAt: new Date() })) },
+    user: { findUnique: vi.fn(async () => ({
+      id: 'client', role: 'CLIENT', accountStatus: 'ACTIVE', emailVerifiedAt: new Date(),
+      firstName: 'Test', lastName: 'Client', dateOfBirth: new Date('2000-01-01')
+    })) },
     doctorProfile: { findUnique: vi.fn(async () => ({ userId: 'doctor-user', firstName: 'Test', lastName: 'Doctor', verificationStatus: 'VERIFIED' })) },
     payment: { findUnique: vi.fn(async () => ({
       clientId: 'client', status: 'SUCCEEDED', doctorId: 'doctor', slotStart: start, slotEnd: end,

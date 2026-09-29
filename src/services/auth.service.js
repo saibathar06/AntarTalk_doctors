@@ -128,7 +128,10 @@ export async function registerDoctor(input, context = {}) {
   const passwordHash = await argon2.hash(password, passwordOptions);
   const user = await prisma.$transaction(async (tx) => {
     const created = await tx.user.create({
-      data: { email: profile.email, passwordHash, role: 'DOCTOR' },
+      data: {
+        email: profile.email, passwordHash, role: 'DOCTOR',
+        firstName: profile.firstName, lastName: profile.lastName, dateOfBirth: profile.dateOfBirth
+      },
       select: { id: true, email: true, role: true, accountStatus: true, emailVerifiedAt: true, tokenVersion: true }
     });
     const doctorData = profileData(profile);

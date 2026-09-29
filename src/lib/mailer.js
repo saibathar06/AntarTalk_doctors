@@ -20,10 +20,10 @@ function maskEmail(email) {
   return `${local.slice(0, 2)}${'*'.repeat(Math.max(1, Math.min(6, local.length - 2)))}@${domain}`;
 }
 
-export async function sendBookingEmail({ email, text, messageId, subject = 'Your AntarTalk session update' }) {
+export async function sendBookingEmail({ email, text, html, messageId, subject = 'Your AntarTalk session update' }) {
   const result = await transport.sendMail({
     from: env.EMAIL_FROM, to: email, subject,
-    text, messageId, disableFileAccess: true, disableUrlAccess: true
+    text, html, messageId, disableFileAccess: true, disableUrlAccess: true
   });
   if (!result.accepted?.length) throw new Error('Booking email recipient not accepted');
   logger.info({ recipient: maskEmail(email), messageId: result.messageId }, 'Booking email accepted by SMTP');

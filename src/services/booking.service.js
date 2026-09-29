@@ -7,6 +7,7 @@ import { assertStructurallyBookable, deleteReservationIfOwned, readOwnedReservat
 import { serialTransaction, lockUser, lockDoctor } from './transaction.service.js';
 import { validatePayment } from './payment.service.js';
 import { enqueueBookingNotifications } from './notification.service.js';
+import { clientBookingIdentity } from './clientIdentity.service.js';
 
 const bookingSelect = {
   id: true, doctorId: true, clientId: true, startTime: true, endTime: true,
@@ -35,6 +36,7 @@ export async function confirmBooking(clientId, input, idempotencyKey, context = 
     booking = await serialTransaction(async (tx) => {
       const user = await lockUser(tx, clientId);
       if (user.role !== 'CLIENT' || !user.emailVerifiedAt) throw new AppError(403, 'FORBIDDEN', 'Verified client account required.');
+      const clientIdentity = clientBookingIdentity(user, input.startTime);
       const replay = await tx.idempotencyRecord.findUnique({ where: { userId_scope_key: { userId: clientId, scope: 'BOOKING_CONFIRM', key: idempotencyKey } } });
       if (replay) {
         if (replay.requestHash !== requestHash) throw new AppError(409, 'IDEMPOTENCY_KEY_REUSED', 'This key was used for another request.');
@@ -61,8 +63,7 @@ export async function confirmBooking(clientId, input, idempotencyKey, context = 
         data: {
           doctorId: input.doctorId,
           clientId,
-          clientName: input.clientName,
-          clientAge: input.clientAge,
+          ...clientIdentity,
           startTime: slot.startTime,
           endTime: slot.endTime,
           sessionDurationMinutes: scheduling.sessionDurationMinutes,

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../src/lib/prisma.js', () => ({ prisma: {} }));
 vi.mock('../src/lib/mailer.js', () => ({ sendBookingEmail: vi.fn() }));
-import { bookingEmailText, processBookingEmails } from '../src/services/bookingEmail.service.js';
+import { bookingEmailHtml, bookingEmailText, processBookingEmails } from '../src/services/bookingEmail.service.js';
 import { sendBookingEmail } from '../src/lib/mailer.js';
 const booking = {
   id: 'booking', status: 'CONFIRMED', startTime: new Date('2030-01-07T04:30Z'), sessionDurationMinutes: 40,
@@ -26,6 +26,16 @@ describe('booking confirmation emails', () => {
     expect(text).not.toContain('1200');
     expect(text).not.toContain('client@example.test');
   });
+  it('renders branded responsive HTML for client and doctor messages', () => {
+    const clientHtml = bookingEmailHtml(booking, 'CLIENT');
+    const doctorHtml = bookingEmailHtml(booking, 'DOCTOR');
+    expect(clientHtml).toContain('BOOKING CONFIRMED');
+    expect(clientHtml).toContain('Session booked successfully');
+    expect(clientHtml).toContain('INR 1200.00');
+    expect(doctorHtml).toContain('NEW SESSION CONFIRMED');
+    expect(doctorHtml).toContain('Example Client');
+    expect(doctorHtml).not.toContain('INR 1200.00');
+  });
   function database(count = 1) {
     return {
       bookingEmail: { findMany: vi.fn(async () => [{ id: 'job', bookingId: 'booking', audience: 'CLIENT', attempts: 0 }]), updateMany: vi.fn(async () => ({ count })), update: vi.fn() },
@@ -35,7 +45,7 @@ describe('booking confirmation emails', () => {
   it('marks a claimed delivery complete only after SMTP succeeds', async () => {
     const db = database();
     await processBookingEmails(db);
-    expect(sendBookingEmail).toHaveBeenCalledWith(expect.objectContaining({ email: 'client@example.test', messageId: '<booking-job@antartalk.com>' }));
+    expect(sendBookingEmail).toHaveBeenCalledWith(expect.objectContaining({ email: 'client@example.test', html: expect.stringContaining('Session booked successfully'), messageId: '<booking-job@antartalk.com>' }));
     expect(db.bookingEmail.update).toHaveBeenCalledWith({ where: { id: 'job' }, data: { sentAt: expect.any(Date) } });
   });
   it('does not send a job claimed by a concurrent worker', async () => {

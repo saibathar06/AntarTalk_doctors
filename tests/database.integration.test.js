@@ -16,7 +16,10 @@ describe.skipIf(!enabled)('real PostgreSQL and Redis concurrency', () => {
     ({ redis } = await import('../src/lib/redis.js'));
     ({ reserveSlot, reservationKey } = await import('../src/services/slot.service.js'));
     ({ confirmBooking } = await import('../src/services/booking.service.js'));
-    const user = (role, suffix) => db.user.create({ data: { email: prefix + suffix + '@example.invalid', role, passwordHash: 'unused-test-hash', emailVerifiedAt: new Date() } });
+    const user = (role, suffix) => db.user.create({ data: {
+      email: prefix + suffix + '@example.invalid', role, passwordHash: 'unused-test-hash', emailVerifiedAt: new Date(),
+      firstName: 'Integration', lastName: 'Client', dateOfBirth: new Date('2000-01-01')
+    } });
     doctorUser = await user('DOCTOR', 'doctor'); otherDoctorUser = await user('DOCTOR', 'other-doctor');
     client = await user('CLIENT', 'client'); otherClient = await user('CLIENT', 'other-client');
     const profile = (owner) => db.doctorProfile.create({ data: {

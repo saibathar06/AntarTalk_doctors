@@ -149,8 +149,6 @@ export function BookSessionPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [confirmationKey, setConfirmationKey] = useState("");
-  const [clientName, setClientName] = useState("");
-  const [clientAge, setClientAge] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -260,8 +258,6 @@ export function BookSessionPage() {
           doctorId: reservation.slot.doctorId,
           startTime: reservation.slot.startTime,
           paymentId: order.paymentId,
-          clientName: clientName.trim(),
-          clientAge: Number(clientAge),
           razorpayOrderId: result.razorpay_order_id,
           razorpayPaymentId: result.razorpay_payment_id,
           razorpaySignature: result.razorpay_signature,
@@ -408,12 +404,8 @@ export function BookSessionPage() {
           <div className="booking-section-heading"><div><p className="eyebrow">PAYMENT STEP</p><h2>Your session is temporarily held</h2></div><span className="reservation-clock" aria-live="polite">{minutes}</span></div>
           <p>The hold is owned by your client account and expires at the server-provided time. Keep this page open while completing payment.</p>
           <div className="payment-test-note"><CreditCardIcon /><div><strong>Secure Razorpay checkout</strong><p>Your session fee is collected in INR. The consultation fee is shown before payment; AntarTalk’s commission is handled securely on the server.</p></div></div>
-          <div className="form-grid">
-            <label>Your name<input value={clientName} maxLength={200} disabled={Boolean(busy)} onChange={(e) => setClientName(e.target.value)} required /></label>
-            <label>Your age<input type="number" min={1} max={120} step={1} value={clientAge} disabled={Boolean(busy)} onChange={(e) => setClientAge(e.target.value)} required /></label>
-          </div>
-          <p className="help">Only your name, age and session time are shared with your doctor in the confirmation email.</p>
-          <button className="button" disabled={Boolean(busy) || !clientName.trim() || !Number.isInteger(Number(clientAge)) || Number(clientAge) < 1 || Number(clientAge) > 120} onClick={startPayment}>{busy === "payment" ? "Opening secure checkout…" : busy === "confirm" ? "Confirming booking…" : "Pay securely with Razorpay"}</button>
+          <p className="help">Your name and age are securely taken from your authenticated client profile. You do not need to enter them again.</p>
+          <button className="button" disabled={Boolean(busy)} onClick={startPayment}>{busy === "payment" ? "Opening secure checkout…" : busy === "confirm" ? "Confirming booking…" : "Pay securely with Razorpay"}</button>
         </section>
       )}
 

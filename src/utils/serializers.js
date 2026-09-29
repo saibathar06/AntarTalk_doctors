@@ -31,6 +31,9 @@ export function serializeUser(user) {
   return {
     id: user.id,
     email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    dateOfBirth: user.dateOfBirth,
     role: user.role,
     emailVerifiedAt: user.emailVerifiedAt,
     accountStatus: user.accountStatus,

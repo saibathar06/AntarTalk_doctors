@@ -211,9 +211,6 @@ test("client booking uses the live slot, reservation, and confirmation contracts
   await page.getByRole("button", { name: "Book session" }).click();
   await expect(page.getByText("Secure Razorpay checkout")).toBeVisible();
   expect(reservationRequest).toEqual({ doctorId, startTime: start });
-  await expect(page.getByRole("button", { name: "Pay securely with Razorpay" })).toBeDisabled();
-  await page.getByLabel("Your name", { exact: true }).fill("Test Client");
-  await page.getByLabel("Your age", { exact: true }).fill("28");
   await page.getByRole("button", { name: "Pay securely with Razorpay" }).click();
   await expect(page.getByRole("heading", { name: "Session booked successfully" })).toBeVisible();
   expect(confirmationRequest).toEqual({
@@ -224,8 +221,6 @@ test("client booking uses the live slot, reservation, and confirmation contracts
     razorpayOrderId: "order_test",
     razorpayPaymentId: "pay_test",
     razorpaySignature: "a".repeat(64),
-    clientName: "Test Client",
-    clientAge: 28,
   });
 });
 test("real empty states, profile completion, navigation and responsive layout", async ({

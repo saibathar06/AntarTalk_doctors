@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js';
 import { safeEqual } from '../utils/crypto.js';
 import { assertStructurallyBookable, readOwnedReservation } from './slot.service.js';
 import { confirmBooking } from './booking.service.js';
+import { clientBookingIdentity } from './clientIdentity.service.js';
 
 const apiBase = 'https://api.razorpay.com/v1';
 
@@ -62,6 +63,11 @@ function verifySignature(orderId, paymentId, signature) {
 
 export async function createRazorpayOrder(clientId, input) {
   assertConfigured();
+  const client = await prisma.user.findUnique({
+    where: { id: clientId },
+    select: { firstName: true, lastName: true, dateOfBirth: true }
+  });
+  clientBookingIdentity(client, input.startTime);
   const reservation = await readOwnedReservation(clientId, input);
   const slot = await assertStructurallyBookable(input.doctorId, input.startTime);
   if (reservation.value.endTime !== slot.endTime.toISOString()) {
@@ -139,8 +145,6 @@ export async function verifyRazorpayPayment(clientId, input, idempotencyKey) {
     doctorId: input.doctorId,
     startTime: input.startTime,
     paymentId: payment.id,
-    clientName: input.clientName,
-    clientAge: input.clientAge
   }, idempotencyKey, { allowCapturedPaymentRecovery: true });
 }
 
