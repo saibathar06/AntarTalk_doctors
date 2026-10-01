@@ -9,14 +9,24 @@ import { logout, rotateRefreshToken } from '../services/auth.service.js';
 import { beginDoctorLogin, registerWebsiteDoctor, requestDoctorPasswordReset, resetDoctorPassword, sendDoctorOtp, verifyDoctorOtp } from '../services/doctorAuth.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { websiteForgotPasswordSchema, websiteLoginSchema, websiteRegisterSchema, websiteResendSchema, websiteResetPasswordSchema, websiteVerifySchema } from '../validation/doctorAuth.schemas.js';
+import { z } from 'zod';
 
 export const doctorAuthRouter = Router();
 const cookieName = 'antartalk_doctor_refresh';
 const cookieOptions = { httpOnly: true, secure: env.NODE_ENV === 'production', sameSite: /** @type {const} */ ('strict'), path: '/api/doctor/auth' };
 const readCookie = (req) => parseCookie(req.headers.cookie ?? '')[cookieName];
-function sendTokens(res, tokens) {
+function isMobileClient(req) {
+  return req.get('x-client-surface') === 'MOBILE';
+}
+function sendTokens(res, tokens, mobile = false) {
   res.cookie(cookieName, tokens.refreshToken, { ...cookieOptions, maxAge: env.REFRESH_TOKEN_TTL_DAYS * 86400000 });
-  res.json({ success: true, data: { accessToken: tokens.accessToken, expiresIn: tokens.expiresIn } });
+  // Native apps cannot rely on browser-scoped HttpOnly cookies. The refresh
+  // token is returned only to the explicitly identified mobile surface, which
+  // persists it in OS-backed secure storage. Web callers keep the cookie-only
+  // refresh-token contract unchanged.
+  res.json({ success: true, data: mobile
+    ? { accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, expiresIn: tokens.expiresIn }
+    : { accessToken: tokens.accessToken, expiresIn: tokens.expiresIn } });
 }
 doctorAuthRouter.use((req, res, next) => {
   res.set('Cache-Control', 'no-store');
@@ -40,20 +50,22 @@ doctorAuthRouter.post('/login', otpLimiter, validate(websiteLoginSchema), asyncH
   res.json({ success: true, data: await beginDoctorLogin(req.body) });
 }));
 doctorAuthRouter.post('/send-otp', otpLimiter, validate(websiteResendSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await sendDoctorOtp(req.body) })));
-doctorAuthRouter.post('/verify-otp', validate(websiteVerifySchema), asyncHandler(async (req, res) => sendTokens(res, await verifyDoctorOtp(req.body, { ip: req.ip }))));
+doctorAuthRouter.post('/verify-otp', validate(websiteVerifySchema), asyncHandler(async (req, res) => sendTokens(res, await verifyDoctorOtp(req.body, { ip: req.ip }), isMobileClient(req))));
 doctorAuthRouter.post('/forgot-password', otpLimiter, validate(websiteForgotPasswordSchema), asyncHandler(async (req, res) => {
   res.json({ success: true, data: await requestDoctorPasswordReset(req.body) });
 }));
 doctorAuthRouter.post('/reset-password', otpLimiter, validate(websiteResetPasswordSchema), asyncHandler(async (req, res) => {
   res.json({ success: true, data: await resetDoctorPassword(req.body, { ip: req.ip }) });
 }));
-doctorAuthRouter.post('/refresh', asyncHandler(async (req, res) => {
-  const token = readCookie(req);
+doctorAuthRouter.post('/refresh', validate(z.object({ body: z.object({ refreshToken: z.string().min(32).max(4096).optional() }).default({}) })), asyncHandler(async (req, res) => {
+  const mobile = isMobileClient(req);
+  const token = mobile ? req.body.refreshToken : readCookie(req);
   if (!token) throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Sign in to continue.');
-  sendTokens(res, await rotateRefreshToken(token, ['DOCTOR', 'ADMIN']));
+  sendTokens(res, await rotateRefreshToken(token, ['DOCTOR', 'ADMIN']), mobile);
 }));
 doctorAuthRouter.post('/logout', authenticateUser, requireWebsiteUser, asyncHandler(async (req, res) => {
-  await logout(req.user.id, { refreshToken: readCookie(req), allDevices: req.body?.allDevices === true }, { ip: req.ip });
+  const refreshToken = isMobileClient(req) ? req.body?.refreshToken : readCookie(req);
+  await logout(req.user.id, { refreshToken, allDevices: req.body?.allDevices === true }, { ip: req.ip });
   res.clearCookie(cookieName, cookieOptions);
   res.json({ success: true, data: { loggedOut: true } });
 }));

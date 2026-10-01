@@ -1,0 +1,2 @@
+import { Stack, router } from 'expo-router'; import { useEffect } from 'react'; import { useSession } from '../../src/auth'; import { Loader } from '../../src/ui';
+export default function AdminLayout() { const { ready, viewer } = useSession(); useEffect(() => { if (ready && (!viewer || viewer.role !== 'ADMIN')) router.replace(viewer?.role === 'DOCTOR' ? '/(doctor)/(tabs)' : '/(auth)/login'); }, [ready, viewer]); if (!ready || viewer?.role !== 'ADMIN') return <Loader label="Checking administrator access…" />; return <Stack screenOptions={{ headerShown: false }} />; }

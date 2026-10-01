@@ -1,0 +1,38 @@
+{
+  "expo": {
+    "name": "AntarTalk Professionals",
+    "slug": "antartalk-doctor",
+    "scheme": "antartalk-doctor",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "com.antartalk.doctor",
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.antartalk.doctor",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "AntarTalk needs camera access only when you join a video session or choose a profile photo.",
+        "NSMicrophoneUsageDescription": "AntarTalk needs microphone access only when you join a video session.",
+        "NSPhotoLibraryUsageDescription": "AntarTalk needs photo library access when you choose a profile photo.",
+        "NSUserNotificationsUsageDescription": "AntarTalk uses notifications for appointment and booking updates."
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-notifications",
+      "expo-image-picker",
+      "expo-document-picker",
+      "expo-camera",
+      "expo-status-bar"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

@@ -45,6 +45,11 @@ describe('website authentication HTTP boundary', () => {
     expect(result.headers['set-cookie'][0]).toContain('Path=/api/doctor/auth');
     expect(result.headers['cache-control']).toBe('no-store');
   });
+  it('returns a rotated refresh token only to the explicit native mobile surface', async () => {
+    const result = await request(app).post('/api/doctor/auth/verify-otp').set('X-Client-Surface', 'MOBILE').send({ challengeToken: 'x'.repeat(40), otp: '123456' });
+    expect(result.status).toBe(200);
+    expect(result.body.data).toEqual({ accessToken: 'access', refreshToken: 'private-refresh', expiresIn: '15m' });
+  });
   it('rejects invalid codes before invoking authentication', async () => {
     const result = await request(app).post('/api/doctor/auth/verify-otp').set('Origin', 'http://localhost:5173').send({ identifier: 'doctor@example.com', purpose: 'DOCTOR_LOGIN', otp: 'abc' });
     expect(result.status).toBe(422);
