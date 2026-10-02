@@ -35,7 +35,8 @@ export function changedCredentialFields(current, profileInput) {
 export async function getProfile(userId) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, email: true, emailVerifiedAt: true, accountStatus: true, doctorProfile: { select: doctorProfileSelect } } });
   if (!user?.doctorProfile) throw new AppError(404, 'DOCTOR_NOT_FOUND', 'Doctor profile not found.');
-  return { ...user.doctorProfile, email: user.email, ...profileCompletion(user.doctorProfile), canTakeSessions: canDoctorTakeSessions(user.doctorProfile, user) };
+  const { stampSignature, ...profile } = user.doctorProfile;
+  return { ...profile, email: user.email, hasStampSignature: Boolean(stampSignature), ...profileCompletion({ ...profile, hasStampSignature: Boolean(stampSignature) }), canTakeSessions: canDoctorTakeSessions(profile, user) };
 }
 
 export async function updateProfile(userId, input, context = {}) {

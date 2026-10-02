@@ -11,6 +11,7 @@ const clientLabel = (doctorId, clientId) => `Client ${crypto.createHmac('sha256'
 /** @type {import('@prisma/client').Prisma.BookingSelect} */
 const select = {
   id: true, clientId: true, clientName: true, startTime: true, endTime: true, sessionDurationMinutes: true, bufferDurationMinutes: true,
+  client: { select: { firstName: true, lastName: true } },
   status: true, cancelledAt: true, cancelledBy: true, cancellationReason: true, rescheduleCount: true,
   earning: { select: { amount: true, currency: true, status: true } },
   rescheduleRequests: { where: { status: 'PENDING' }, select: { id: true, proposedStartTime: true, proposedEndTime: true, reason: true, createdAt: true }, take: 1 }
@@ -22,9 +23,9 @@ export function joinState(booking, eligible, now = Date.now()) {
   return { state, canJoin: state === 'READY', opensAt, closesAt: new Date(therapyEnd) };
 }
 const serialize = (booking, doctor) => {
-  const { clientId, ...safe } = booking;
+  const { clientId, client, ...safe } = booking;
   // A professional may see the assigned client's name, but never their contact details or internal ID.
-  const assignedClientName = booking.clientName?.trim();
+  const assignedClientName = booking.clientName?.trim() || [client?.firstName, client?.lastName].filter(Boolean).join(' ').trim();
   return { ...safe, clientLabel: assignedClientName || clientLabel(doctor.id, clientId), sessionType: 'Therapy session', join: joinState(booking, canDoctorTakeSessions(doctor)) };
 };
 async function profile(doctorId) {
@@ -63,6 +64,29 @@ export async function dashboard(doctorId) {
 }
 export async function clients(doctorId, { page = 1, limit = 20 }) {
   const rows = await prisma.booking.groupBy({ by: ['clientId'], where: { doctorId }, _count: { id: true }, _max: { startTime: true, clientName: true }, orderBy: { _max: { startTime: 'desc' } }, skip: (page - 1) * limit, take: limit });
-  const total = await prisma.$queryRaw`SELECT COUNT(DISTINCT "clientId")::int AS count FROM "Booking" WHERE "doctorId" = ${doctorId}::uuid`;
-  return { items: rows.map((row) => ({ label: row._max.clientName?.trim() || clientLabel(doctorId, row.clientId), appointmentCount: row._count.id, latestAppointmentAt: row._max.startTime })), pagination: { page, limit, total: total[0].count, pages: Math.ceil(total[0].count / limit) } };
+  const [total, people] = await Promise.all([
+    prisma.$queryRaw`SELECT COUNT(DISTINCT "clientId")::int AS count FROM "Booking" WHERE "doctorId" = ${doctorId}::uuid`,
+    rows.length ? prisma.user.findMany({ where: { id: { in: rows.map((row) => row.clientId) } }, select: { id: true, firstName: true, lastName: true } }) : []
+  ]);
+  const names = new Map();
+  for (const person of people) names.set(person.id, [person.firstName, person.lastName].filter(Boolean).join(' ').trim());
+  return { items: rows.map((row) => ({ clientId: row.clientId, label: row._max.clientName?.trim() || names.get(row.clientId) || clientLabel(doctorId, row.clientId), appointmentCount: row._count.id, latestAppointmentAt: row._max.startTime })), pagination: { page, limit, total: total[0].count, pages: Math.ceil(total[0].count / limit) } };
+}
+
+export async function clientSessions(doctorId, clientId, { page = 1, limit = 20 }) {
+  const clientBooking = await prisma.booking.findFirst({ where: { doctorId, clientId }, select: { clientName: true } });
+  if (!clientBooking) throw new AppError(404, 'CLIENT_NOT_FOUND', 'Client not found in this practice.');
+  const where = { doctorId, clientId, endTime: { lt: new Date() } };
+  const [items, total] = await Promise.all([
+    prisma.booking.findMany({ where, select: {
+      id: true, startTime: true, endTime: true, sessionDurationMinutes: true, status: true,
+      prescription: { select: { id: true, medicines: true, instructions: true, issuedAt: true } }
+    }, orderBy: { startTime: 'desc' }, skip: (page - 1) * limit, take: limit }),
+    prisma.booking.count({ where })
+  ]);
+  return {
+    client: { name: clientBooking.clientName?.trim() || clientLabel(doctorId, clientId) },
+    items,
+    pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+  };
 }

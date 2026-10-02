@@ -68,6 +68,22 @@ export async function saveUpload(userId, doctorId, file, document = false) {
   if (oldUrl) await removeStoredUpload(userId, oldUrl);
   return { url };
 }
+
+export async function saveStampSignature(userId, doctorId, file) {
+  if (!file) throw new AppError(422, 'FILE_REQUIRED', 'Choose a signature or stamp image.');
+  const data = await normalizeImageUpload(file);
+  await prisma.$transaction(async (tx) => {
+    await lockUser(tx, userId);
+    await lockDoctor(tx, doctorId);
+    const doctor = await tx.doctorProfile.findUnique({ where: { id: doctorId }, select: { professionalCategory: true } });
+    if (!doctor || doctor.professionalCategory !== 'PSYCHIATRIST') {
+      throw new AppError(403, 'PRESCRIPTIONS_NOT_PERMITTED', 'Only psychiatrists can add a prescription signature.');
+    }
+    await tx.doctorSignature.upsert({ where: { doctorId }, create: { doctorId, data }, update: { data } });
+    await recordAudit({ actorId: userId, action: 'DOCTOR_STAMP_SIGNATURE_UPDATED', entityType: 'DoctorProfile', entityId: doctorId }, tx);
+  }, { timeout: env.BOOKING_TRANSACTION_TIMEOUT_MS, maxWait: 5000 });
+  return { hasStampSignature: true };
+}
 export async function readUpload(userId, filename) {
   const doctor = await prisma.doctorProfile.findUnique({ where: { userId }, select: { id: true, profileImageUrl: true, licenseDocumentUrl: true } });
   const url = `/api/doctor/files/${filename}`;

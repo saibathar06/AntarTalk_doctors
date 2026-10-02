@@ -8,18 +8,19 @@ import * as sessions from '../services/session.service.js';
 import * as lifecycle from '../services/bookingLifecycle.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import {
-  blockedIdSchema, changePasswordSchema, createBlockedSlotSchema, payoutAccountSchema, payoutListSchema,
+  blockedIdSchema, changePasswordSchema, clientHistorySchema, createBlockedSlotSchema, payoutAccountSchema, payoutListSchema,
   defaultTimingSchema, doctorRescheduleSchema, doctorSessionActionSchema, presetsSchema, replaceHoursSchema,
-  rescheduleRequestListSchema, respondRescheduleSchema, sessionListSchema, updateProfileSchema, withdrawSchema
+  prescriptionCreateSchema, prescriptionIdSchema, rescheduleRequestListSchema, respondRescheduleSchema, sessionListSchema, updateProfileSchema, withdrawSchema
 } from '../validation/doctor.schemas.js';
 import { z } from 'zod';
 import { uuid } from '../validation/common.js';
 import { sensitiveLimiter } from '../middleware/rateLimits.js';
 import multer from 'multer';
 import * as workspace from '../services/doctorWorkspace.service.js';
-import { saveUpload, readUpload } from '../services/upload.service.js';
+import { saveUpload, saveStampSignature, readUpload } from '../services/upload.service.js';
 import { pagination } from '../validation/common.js';
 import { changePassword } from '../services/auth.service.js';
+import * as prescriptions from '../services/prescription.service.js';
 
 export const doctorRouter = Router();
 doctorRouter.use(authenticateUser, requireDoctor, sensitiveLimiter);
@@ -29,6 +30,7 @@ doctorRouter.get('/profile', asyncHandler(async (req, res) => res.json({ success
 doctorRouter.patch('/profile', validate(updateProfileSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await doctor.updateProfile(req.user.id, req.body, { ip: req.ip }) })));
 doctorRouter.post('/profile/photo', upload.single('file'), asyncHandler(async (req, res) => res.status(201).json({ success: true, data: await saveUpload(req.user.id, req.user.doctorProfile.id, req.file) })));
 doctorRouter.post('/profile/documents', upload.single('file'), asyncHandler(async (req, res) => res.status(201).json({ success: true, data: await saveUpload(req.user.id, req.user.doctorProfile.id, req.file, true) })));
+doctorRouter.post('/profile/stamp-signature', upload.single('file'), asyncHandler(async (req, res) => res.status(201).json({ success: true, data: await saveStampSignature(req.user.id, req.user.doctorProfile.id, req.file) })));
 doctorRouter.get('/files/:filename', validate(z.object({ params: z.object({ filename: z.string().regex(/^[a-f0-9-]{36}\.(jpg|pdf)$/) }) })), asyncHandler(async (req, res) => {
   const file = await readUpload(req.user.id, req.params.filename);
   res.set('Content-Security-Policy', "default-src 'none'; sandbox");
@@ -42,6 +44,7 @@ doctorRouter.get('/files/:filename', validate(z.object({ params: z.object({ file
 doctorRouter.get('/dashboard', asyncHandler(async (req, res) => res.json({ success: true, data: await workspace.dashboard(req.user.doctorProfile.id) })));
 doctorRouter.get('/appointments', requireVerifiedDoctor, validate(z.object({ query: z.object({ ...pagination, filter: z.enum(['upcoming', 'today', 'past', 'completed', 'cancelled']).default('upcoming'), date: z.string().date().optional() }) })), asyncHandler(async (req, res) => res.json({ success: true, data: await workspace.appointments(req.user.doctorProfile.id, req.query) })));
 doctorRouter.get('/clients', requireVerifiedDoctor, validate(payoutListSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await workspace.clients(req.user.doctorProfile.id, req.query) })));
+doctorRouter.get('/clients/:clientId/sessions', requireVerifiedDoctor, validate(clientHistorySchema), asyncHandler(async (req, res) => res.json({ success: true, data: await workspace.clientSessions(req.user.doctorProfile.id, req.params.clientId, req.query) })));
 
 doctorRouter.get('/me', asyncHandler(async (req, res) => res.json({ success: true, data: await doctor.getProfile(req.user.id) })));
 doctorRouter.patch('/me', validate(updateProfileSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await doctor.updateProfile(req.user.id, req.body, { ip: req.ip }) })));
@@ -78,6 +81,14 @@ doctorRouter.get('/sessions', requireVerifiedDoctor, validate(sessionListSchema)
 doctorRouter.post('/sessions/:id/join', requireVerifiedDoctor, validate(z.object({ params: z.object({ id: uuid }), body: z.object({ surface: z.enum(['WEB', 'MOBILE']).default('WEB') }).default({ surface: 'WEB' }) })), asyncHandler(async (req, res) => res.json({ success: true, data: await sessions.createJoinAccess(req.user.id, req.user.doctorProfile.id, req.params.id, req.body.surface) })));
 doctorRouter.post('/sessions/:id/cancel', requireVerifiedDoctor, validate(doctorSessionActionSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await lifecycle.cancelDoctorSession(req.user.id, req.user.doctorProfile.id, req.params.id, req.body.reason, { ip: req.ip }) })));
 doctorRouter.post('/sessions/:id/reschedule', requireVerifiedDoctor, validate(doctorRescheduleSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await lifecycle.rescheduleDoctorSession(req.user.id, req.user.doctorProfile.id, req.params.id, req.body, { ip: req.ip }) })));
+doctorRouter.post('/sessions/:id/prescription', requireVerifiedDoctor, validate(prescriptionCreateSchema), asyncHandler(async (req, res) => {
+  const data = await prescriptions.createPrescription(req.user.id, req.user.doctorProfile.id, req.params.id, req.body, req.headers['idempotency-key'], { ip: req.ip });
+  res.status(201).json({ success: true, data });
+}));
+doctorRouter.get('/prescriptions/:id/pdf', requireVerifiedDoctor, validate(prescriptionIdSchema), asyncHandler(async (req, res) => {
+  const pdf = await prescriptions.getPrescriptionPdf(req.user.doctorProfile.id, req.params.id);
+  res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="antartalk-prescription-${req.params.id}.pdf"`, 'Cache-Control': 'no-store' }).send(pdf);
+}));
 doctorRouter.get('/reschedule-requests', requireVerifiedDoctor, validate(rescheduleRequestListSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await lifecycle.listDoctorRescheduleRequests(req.user.doctorProfile.id, req.query) })));
 doctorRouter.post('/reschedule-requests/:id/respond', requireVerifiedDoctor, validate(respondRescheduleSchema), asyncHandler(async (req, res) => res.json({ success: true, data: await lifecycle.respondToReschedule(req.user.id, req.user.doctorProfile.id, req.params.id, req.body.decision, { ip: req.ip }) })));
 

@@ -8,6 +8,7 @@ import { processPushDeliveries } from './services/notification.service.js';
 import { processVideoProvisioning } from './services/video.service.js';
 import { processRazorpayRefunds } from './services/razorpay.service.js';
 import { processAutomaticSessionCompletion } from './services/bookingLifecycle.service.js';
+import { processPrescriptionEmails } from './services/prescription.service.js';
 
 // Redis-backed middleware may begin the lazy connection while modules load; ping
 // waits for that same connection without attempting a second connect().
@@ -33,10 +34,11 @@ async function asyncJobTick() {
       await processVideoProvisioning();
       await processAutomaticSessionCompletion();
     };
-    const results = await Promise.allSettled([processPushDeliveries(), videoJobs(), processRazorpayRefunds()]);
+    const results = await Promise.allSettled([processPushDeliveries(), videoJobs(), processRazorpayRefunds(), processPrescriptionEmails()]);
     if (results[0].status === 'rejected') logger.error({ errorType: results[0].reason?.name ?? 'Error' }, 'Push notification queue unavailable');
     if (results[1].status === 'rejected') logger.error({ errorType: results[1].reason?.name ?? 'Error' }, 'Video provisioning queue unavailable');
     if (results[2].status === 'rejected') logger.error({ errorType: results[2].reason?.name ?? 'Error' }, 'Refund queue unavailable');
+    if (results[3].status === 'rejected') logger.error({ errorType: results[3].reason?.name ?? 'Error' }, 'Prescription email queue unavailable');
   } finally { processingAsyncJobs = false; }
 }
 const asyncJobTimer = globalThis.setInterval(() => { void asyncJobTick(); }, 15000);

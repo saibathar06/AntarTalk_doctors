@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 vi.mock('../src/lib/prisma.js', () => ({ prisma: {
-  doctorProfile: { findUnique: vi.fn() }, booking: { findMany: vi.fn(), count: vi.fn(), groupBy: vi.fn() }, $queryRaw: vi.fn()
+  doctorProfile: { findUnique: vi.fn() }, booking: { findMany: vi.fn(), count: vi.fn(), groupBy: vi.fn() }, user: { findMany: vi.fn() }, $queryRaw: vi.fn()
   , doctorPhoto: { findUnique: vi.fn() }, doctorCredentialDocument: { findUnique: vi.fn() }
 } }));
 import { prisma } from '../src/lib/prisma.js';
@@ -17,7 +17,7 @@ const doctor = {
   licenseNumber: 'TEST', qualification: 'MSc', experienceYears: 0, consultationFee: 1200, bio: 'About care', languages: ['English'], preferredSessionLanguage: 'English', expertise: ['Anxiety'],
   verificationStatus: 'VERIFIED', isAcceptingBookings: true, user: { role: 'DOCTOR', accountStatus: 'ACTIVE', emailVerifiedAt: new Date() }
 };
-beforeEach(() => { vi.clearAllMocks(); prisma.doctorProfile.findUnique.mockResolvedValue(doctor); prisma.doctorCredentialDocument.findUnique.mockResolvedValue(null); });
+beforeEach(() => { vi.clearAllMocks(); prisma.doctorProfile.findUnique.mockResolvedValue(doctor); prisma.user.findMany.mockResolvedValue([]); prisma.doctorCredentialDocument.findUnique.mockResolvedValue(null); });
 describe('server-derived profile and eligibility', () => {
   it('accepts zero years experience and calculates all required fields', () => expect(profileCompletion(doctor)).toEqual({ profileCompleted: true, completionPercentage: 100, missingFields: [] }));
   it.each(['firstName', 'profileImageUrl', 'professionalCategory', 'qualification', 'licenseNumber', 'bio', 'languages', 'preferredSessionLanguage', 'expertise'])('rejects incomplete %s', (field) => expect(canDoctorTakeSessions({ ...doctor, [field]: null })).toBe(false));
@@ -62,12 +62,20 @@ describe('doctor-scoped workspace', () => {
     expect(result.items[0].clientLabel).toBe('Asha Sharma');
     expect(JSON.stringify(result)).not.toContain('private-client-id');
   });
+  it('filters the completed appointment view by the permanent completed status', async () => {
+    prisma.booking.findMany.mockResolvedValue([]);
+    prisma.booking.count.mockResolvedValue(0);
+    await appointments('doctor', { filter: 'completed', page: 1, limit: 20 });
+    expect(prisma.booking.findMany.mock.calls[0][0].where).toEqual({ doctorId: 'doctor', status: 'COMPLETED' });
+  });
   it('scopes client aggregates to the assigned doctor', async () => {
     prisma.booking.groupBy.mockResolvedValue([{ clientId: 'private', _count: { id: 3 }, _max: { startTime: new Date(), clientName: 'Asha Sharma' } }]);
     prisma.$queryRaw.mockResolvedValue([{ count: 1 }]);
     const result = await clients('doctor', { page: 1, limit: 20 });
     expect(prisma.booking.groupBy.mock.calls[0][0].where).toEqual({ doctorId: 'doctor' });
-    expect(result.items[0]).not.toHaveProperty('clientId');
+    // This opaque value is used only to request the doctor-owned history route;
+    // the mobile UI never renders it and the route verifies ownership server-side.
+    expect(result.items[0].clientId).toBe('private');
     expect(result.items[0].label).toBe('Asha Sharma');
   });
   it('uses the therapy cutoff, not the protected buffer', () => {

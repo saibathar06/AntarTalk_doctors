@@ -23,6 +23,7 @@ export const doctorProfileSelect = {
   institution: true, graduationYear: true, experienceYears: true,
   languages: true, preferredSessionLanguage: true, expertise: true, consultationFee: true, emailNotifications: true,
   isAcceptingBookings: true,
+  stampSignature: { select: { doctorId: true } },
   createdAt: true,
   updatedAt: true
 };

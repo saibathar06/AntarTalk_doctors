@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ApiError, authenticatedFileSource, json, publicDoctorPhotoSource, upload } from '../../src/api';
+import { ApiError, json, upload } from '../../src/api';
 import { useSession } from '../../src/auth';
+import { useProtectedImage } from '../../src/protected-image';
 import { chooseCredentialDocument, chooseProfilePhoto } from '../../src/permissions';
 import { colors } from '../../src/theme';
 import { Button, Card, Field, InlineError, Screen, Title } from '../../src/ui';
@@ -23,8 +24,6 @@ export default function ProfileScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [photoFailed, setPhotoFailed] = useState(false);
-  const [usePrivatePhoto, setUsePrivatePhoto] = useState(false);
   const verified = profile?.verificationStatus === 'VERIFIED';
   const pending = profile?.verificationStatus === 'PENDING' && Boolean(profile?.verificationSubmittedAt);
 
@@ -36,7 +35,7 @@ export default function ProfileScreen() {
       bio: profile.bio ?? '', languages: profile.languages.join(', '), expertise: profile.expertise.join(', '), preferredSessionLanguage: profile.preferredSessionLanguage ?? '', consultationFee: profile.consultationFee ?? '',
     });
   }, [profile]);
-  useEffect(() => { setPhotoFailed(false); setUsePrivatePhoto(false); }, [profile?.profileImageUrl]);
+  const photo = useProtectedImage(profile?.profileImageUrl);
 
   const set = (key: keyof ProfileForm) => (value: string) => setForm((current) => ({ ...current, [key]: value }));
   const resetEditor = () => { setError(''); setNotice(''); setEditing(false); };
@@ -79,6 +78,17 @@ export default function ProfileScreen() {
     } catch (caught) { setError((caught as ApiError).message); } finally { setBusy(false); }
   };
 
+  const uploadStampSignature = async () => {
+    const file = await chooseProfilePhoto();
+    if (!file) return;
+    setBusy(true); setError(''); setNotice('');
+    try {
+      await upload('/api/doctor/profile/stamp-signature', file.uri, file.name, file.mimeType);
+      await refreshProfile();
+      setNotice('Your prescription stamp/signature was stored securely. It is used only when you issue a prescription.');
+    } catch (caught) { setError((caught as ApiError).message); } finally { setBusy(false); }
+  };
+
   const submit = async () => {
     setBusy(true); setError(''); setNotice('');
     try {
@@ -90,10 +100,6 @@ export default function ProfileScreen() {
 
   const initials = `${profile?.firstName?.[0] ?? ''}${profile?.lastName?.[0] ?? ''}`.toUpperCase() || 'AT';
   const missing = profile?.missingFields ?? [];
-  const publicPhoto = Boolean(profile?.profileImageUrl && verified && profile.isAcceptingBookings && !usePrivatePhoto);
-  const photoSource = publicPhoto
-    ? publicDoctorPhotoSource(profile?.id ?? '', profile?.profileImageUrl ?? null)
-    : profile?.profileImageUrl ? authenticatedFileSource(profile.profileImageUrl) : null;
 
   return <Screen>
     <Title subtitle={verified ? 'Your profile is verified and ready for your practice.' : pending ? 'Your professional profile is currently under review.' : 'Save your details as a draft, then submit your complete profile for review.'}>My profile</Title>
@@ -103,7 +109,7 @@ export default function ProfileScreen() {
 
     <Card>
       <View style={styles.photoRow}>
-        <View style={styles.photo}>{photoSource && !photoFailed ? <Image source={photoSource} style={styles.photoImage} onError={() => { if (publicPhoto) setUsePrivatePhoto(true); else setPhotoFailed(true); }} /> : <Text style={styles.photoInitials}>{initials}</Text>}</View>
+        <View style={styles.photo}>{photo.uri && !photo.failed ? <Image source={{ uri: photo.uri }} style={styles.photoImage} /> : <Text style={styles.photoInitials}>{initials}</Text>}</View>
         <View style={styles.photoCopy}><Text style={styles.cardTitle}>Profile photo</Text><Text style={styles.description}>A clear photo is required before professional approval.</Text><Pressable disabled={busy} onPress={uploadPhoto} hitSlop={8}><Text style={[styles.uploadLink, busy && styles.disabledText]}>{profile?.profileImageUrl ? 'Replace photo' : 'Upload photo'}</Text></Pressable></View>
       </View>
       <Text style={styles.help}>JPEG, PNG or WebP up to 5 MB. The backend rotates, compresses and safely standardizes the image for display.</Text>
@@ -147,6 +153,13 @@ export default function ProfileScreen() {
       {!verified ? <Button label={profile?.licenseDocumentUrl ? 'Replace credential document' : 'Upload credential document'} onPress={uploadDocument} loading={busy} variant="secondary" /> : null}
       <Text style={styles.help}>{profile?.licenseDocumentUrl ? 'Credential document securely attached.' : 'Required before you can submit a licensed professional profile for review.'} PDF, JPEG, PNG, or WebP · maximum 5 MB.</Text>
     </Card>
+
+    {profile?.professionalCategory === 'PSYCHIATRIST' ? <Card>
+      <Text style={styles.cardTitle}>Prescription stamp / signature</Text>
+      <Text style={styles.description}>This private signature is required to issue a prescription after a completed session. It is never shown publicly.</Text>
+      <Button label={profile.hasStampSignature ? 'Replace stamp or signature' : 'Upload stamp or signature'} onPress={uploadStampSignature} loading={busy} variant="secondary" />
+      <Text style={styles.help}>{profile.hasStampSignature ? 'Securely attached. It will be embedded only in prescriptions you issue.' : 'JPEG, PNG or WebP · maximum 5 MB.'}</Text>
+    </Card> : null}
 
     {!verified ? <Card>
       <Text style={styles.finalStep}>FINAL STEP</Text><Text style={styles.cardTitle}>Save, then submit for review</Text>

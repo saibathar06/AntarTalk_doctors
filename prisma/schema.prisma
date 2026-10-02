@@ -151,6 +151,7 @@ model User {
   pushDevices            PushDevice[]
   notifications          Notification[]
   rescheduleRequests     RescheduleRequest[] @relation("RescheduleRequester")
+  prescriptions          Prescription[]
 }
 
 model DoctorProfile {
@@ -193,6 +194,7 @@ model DoctorProfile {
   workingHours             DoctorWorkingHour[]
   availabilityPresets      Json                 @default("[]")
   photo                    DoctorPhoto?
+  stampSignature           DoctorSignature?
   credentialDocument       DoctorCredentialDocument?
   blockedSlots             DoctorBlockedSlot[]
   bookings                 Booking[]
@@ -201,6 +203,7 @@ model DoctorProfile {
   payouts                  PayoutTransaction[]
   paymentOrders            Payment[] @relation("PaymentOrderDoctor")
   penalties                DoctorPenalty[]
+  prescriptions            Prescription[]
 
   @@index([verificationStatus, isAcceptingBookings])
 }
@@ -301,6 +304,7 @@ model Booking {
   refund                RefundTransaction?
   penalty               DoctorPenalty?
   rescheduleRequests    RescheduleRequest[]
+  prescription          Prescription?
 
   @@index([doctorId, startTime])
   @@index([clientId, startTime])
@@ -375,6 +379,47 @@ model DoctorPhoto {
   doctorId String @id @db.Uuid
   data Bytes
   doctor DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+}
+
+// A psychiatrist's stamp/signature is private, durable clinical data. It is never
+// served as a public upload and is embedded only into a prescription they issue.
+model DoctorSignature {
+  doctorId  String        @id @db.Uuid
+  data      Bytes
+  createdAt DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime      @updatedAt @db.Timestamptz(3)
+  doctor    DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+}
+
+model Prescription {
+  id           String        @id @default(uuid()) @db.Uuid
+  bookingId    String        @unique @db.Uuid
+  doctorId     String        @db.Uuid
+  clientId     String        @db.Uuid
+  medicines    String        @db.Text
+  instructions String?       @db.Text
+  pdfData      Bytes
+  issuedAt     DateTime      @default(now()) @db.Timestamptz(3)
+  doctor       DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  client       User          @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  booking      Booking       @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  email        PrescriptionEmail?
+
+  @@index([doctorId, issuedAt])
+  @@index([clientId, issuedAt])
+}
+
+// The generated PDF stays in PostgreSQL; a retryable delivery row makes SMTP
+// outages recoverable without regenerating or changing the clinical record.
+model PrescriptionEmail {
+  id             String       @id @default(uuid()) @db.Uuid
+  prescriptionId String       @unique @db.Uuid
+  attempts       Int          @default(0)
+  nextAttemptAt  DateTime     @default(now()) @db.Timestamptz(3)
+  sentAt         DateTime?    @db.Timestamptz(3)
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  @@index([sentAt, nextAttemptAt])
 }
 
 model BookingEmail {

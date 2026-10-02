@@ -20,13 +20,26 @@ function maskEmail(email) {
   return `${local.slice(0, 2)}${'*'.repeat(Math.max(1, Math.min(6, local.length - 2)))}@${domain}`;
 }
 
-export async function sendBookingEmail({ email, text, html, messageId, subject = 'Your AntarTalk session update' }) {
+export async function sendBookingEmail({ email, text, html, messageId, subject = 'Your AntarTalk session update', attachments = undefined }) {
   const result = await transport.sendMail({
     from: env.EMAIL_FROM, to: email, subject,
-    text, html, messageId, disableFileAccess: true, disableUrlAccess: true
+    text, html, messageId, attachments, disableFileAccess: true, disableUrlAccess: true
   });
   if (!result.accepted?.length) throw new Error('Booking email recipient not accepted');
   logger.info({ recipient: maskEmail(email), messageId: result.messageId }, 'Booking email accepted by SMTP');
+}
+
+export async function sendPrescriptionEmail({ email, clientName, doctorName, prescriptionId, pdf }) {
+  const safeClientName = String(clientName || 'there').replace(/[\r\n<>]/g, '').slice(0, 200);
+  const safeDoctorName = String(doctorName || 'your psychiatrist').replace(/[\r\n<>]/g, '').slice(0, 200);
+  return sendBookingEmail({
+    email,
+    subject: 'Your AntarTalk prescription',
+    messageId: `<prescription-${prescriptionId}@antartalk.com>`,
+    text: `Hello ${safeClientName},\n\nDr. ${safeDoctorName} issued an AntarTalk prescription after your completed session. Your prescription PDF is attached.\n\nPrescription ID: ${prescriptionId}`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;color:#172033"><div style="height:6px;background:#f7256f"></div><h1 style="margin:28px 0 8px">Your prescription is ready</h1><p style="color:#667085;line-height:1.6">Dr. ${safeDoctorName} issued a prescription after your completed AntarTalk session. Your PDF is securely attached to this email.</p><p style="font-size:12px;color:#667085">Prescription ID: ${prescriptionId}</p></div>`,
+    attachments: [{ filename: `antartalk-prescription-${prescriptionId}.pdf`, content: pdf, contentType: 'application/pdf' }]
+  });
 }
 
 function otpTemplate(code, label) {

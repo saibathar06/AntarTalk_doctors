@@ -96,6 +96,17 @@ export const respondRescheduleSchema = z.object({
   body: z.object({ decision: z.enum(['APPROVE', 'REJECT']) }).strict()
 });
 
+export const clientHistorySchema = z.object({ params: z.object({ clientId: uuid }), query: z.object({ ...pagination }) });
+export const prescriptionCreateSchema = z.object({
+  params: z.object({ id: uuid }),
+  headers: z.object({ 'idempotency-key': z.string().min(8).max(128) }).passthrough(),
+  body: z.object({
+    medicines: z.string().trim().min(2).max(6000),
+    instructions: z.string().trim().min(2).max(4000).nullable().optional()
+  }).strict()
+});
+export const prescriptionIdSchema = z.object({ params: z.object({ id: uuid }) });
+
 export const payoutListSchema = z.object({ query: z.object({ ...pagination }) });
 export const withdrawSchema = z.object({
   headers: z.object({ 'idempotency-key': z.string().min(8).max(128) }).passthrough(),
