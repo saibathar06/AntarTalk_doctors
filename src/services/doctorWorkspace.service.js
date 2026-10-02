@@ -10,7 +10,7 @@ import { earningsSummary } from './payout.service.js';
 const clientLabel = (doctorId, clientId) => `Client ${crypto.createHmac('sha256', env.OTP_PEPPER).update(`${doctorId}:${clientId}`).digest('hex').slice(0, 10).toUpperCase()}`;
 /** @type {import('@prisma/client').Prisma.BookingSelect} */
 const select = {
-  id: true, clientId: true, startTime: true, endTime: true, sessionDurationMinutes: true, bufferDurationMinutes: true,
+  id: true, clientId: true, clientName: true, startTime: true, endTime: true, sessionDurationMinutes: true, bufferDurationMinutes: true,
   status: true, cancelledAt: true, cancelledBy: true, cancellationReason: true, rescheduleCount: true,
   earning: { select: { amount: true, currency: true, status: true } },
   rescheduleRequests: { where: { status: 'PENDING' }, select: { id: true, proposedStartTime: true, proposedEndTime: true, reason: true, createdAt: true }, take: 1 }
@@ -23,7 +23,9 @@ export function joinState(booking, eligible, now = Date.now()) {
 }
 const serialize = (booking, doctor) => {
   const { clientId, ...safe } = booking;
-  return { ...safe, clientLabel: clientLabel(doctor.id, clientId), sessionType: 'Therapy session', join: joinState(booking, canDoctorTakeSessions(doctor)) };
+  // A professional may see the assigned client's name, but never their contact details or internal ID.
+  const assignedClientName = booking.clientName?.trim();
+  return { ...safe, clientLabel: assignedClientName || clientLabel(doctor.id, clientId), sessionType: 'Therapy session', join: joinState(booking, canDoctorTakeSessions(doctor)) };
 };
 async function profile(doctorId) {
   const doctor = await prisma.doctorProfile.findUnique({ where: { id: doctorId }, include: { user: { select: { role: true, accountStatus: true, emailVerifiedAt: true } } } });
@@ -60,7 +62,7 @@ export async function dashboard(doctorId) {
   return { todaySessions, totalClients: clients[0].count, monthSessions, earnings, averageRating: null, schedule, timezone: doctor.timezone };
 }
 export async function clients(doctorId, { page = 1, limit = 20 }) {
-  const rows = await prisma.booking.groupBy({ by: ['clientId'], where: { doctorId }, _count: { id: true }, _max: { startTime: true }, orderBy: { _max: { startTime: 'desc' } }, skip: (page - 1) * limit, take: limit });
+  const rows = await prisma.booking.groupBy({ by: ['clientId'], where: { doctorId }, _count: { id: true }, _max: { startTime: true, clientName: true }, orderBy: { _max: { startTime: 'desc' } }, skip: (page - 1) * limit, take: limit });
   const total = await prisma.$queryRaw`SELECT COUNT(DISTINCT "clientId")::int AS count FROM "Booking" WHERE "doctorId" = ${doctorId}::uuid`;
-  return { items: rows.map((row) => ({ label: clientLabel(doctorId, row.clientId), appointmentCount: row._count.id, latestAppointmentAt: row._max.startTime })), pagination: { page, limit, total: total[0].count, pages: Math.ceil(total[0].count / limit) } };
+  return { items: rows.map((row) => ({ label: row._max.clientName?.trim() || clientLabel(doctorId, row.clientId), appointmentCount: row._count.id, latestAppointmentAt: row._max.startTime })), pagination: { page, limit, total: total[0].count, pages: Math.ceil(total[0].count / limit) } };
 }

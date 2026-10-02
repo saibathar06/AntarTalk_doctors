@@ -55,12 +55,20 @@ describe('doctor-scoped workspace', () => {
     expect(JSON.stringify(result)).not.toContain('private-client-id');
     expect(result.items[0].clientLabel).toMatch(/^Client [A-F0-9]{10}$/);
   });
+  it('shows the assigned client name without disclosing their internal identifier', async () => {
+    prisma.booking.findMany.mockResolvedValue([{ id: 'booking', clientId: 'private-client-id', clientName: 'Asha Sharma', status: 'CONFIRMED', startTime: new Date('2030-01-01T10:00Z'), endTime: new Date('2030-01-01T11:00Z'), sessionDurationMinutes: 40 }]);
+    prisma.booking.count.mockResolvedValue(1);
+    const result = await appointments('doctor', { date: '2030-01-01', page: 1, limit: 20 });
+    expect(result.items[0].clientLabel).toBe('Asha Sharma');
+    expect(JSON.stringify(result)).not.toContain('private-client-id');
+  });
   it('scopes client aggregates to the assigned doctor', async () => {
-    prisma.booking.groupBy.mockResolvedValue([{ clientId: 'private', _count: { id: 3 }, _max: { startTime: new Date() } }]);
+    prisma.booking.groupBy.mockResolvedValue([{ clientId: 'private', _count: { id: 3 }, _max: { startTime: new Date(), clientName: 'Asha Sharma' } }]);
     prisma.$queryRaw.mockResolvedValue([{ count: 1 }]);
     const result = await clients('doctor', { page: 1, limit: 20 });
     expect(prisma.booking.groupBy.mock.calls[0][0].where).toEqual({ doctorId: 'doctor' });
     expect(result.items[0]).not.toHaveProperty('clientId');
+    expect(result.items[0].label).toBe('Asha Sharma');
   });
   it('uses the therapy cutoff, not the protected buffer', () => {
     const startTime = new Date('2030-01-01T10:00Z'); const booking = { startTime, endTime: new Date('2030-01-01T11:00Z'), sessionDurationMinutes: 40, status: 'CONFIRMED' };

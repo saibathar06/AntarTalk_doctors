@@ -11,6 +11,9 @@ export class ApiError extends Error { constructor(public status: number, public 
 export const apiBaseUrl = () => baseUrl;
 export const authenticatedHeaders = (): Record<string, string> => accessToken ? { Authorization: `Bearer ${accessToken}`, 'X-Client-Surface': 'MOBILE' } : { 'X-Client-Surface': 'MOBILE' };
 export const authenticatedFileSource = (path: string) => ({ uri: endpoint(path), headers: authenticatedHeaders() });
+// Verified doctors' display photos are already public to booking clients. Using the public
+// image route avoids platform-specific failures when React Native image loaders drop headers.
+export const publicDoctorPhotoSource = (doctorId: string, version: string | null) => ({ uri: endpoint(`/api/bookings/doctors/${doctorId}/photo${version ? `?v=${encodeURIComponent(version)}` : ''}`) });
 
 const publicErrorMessages: Record<string, string> = {
   INVALID_CREDENTIALS: 'The email or password is incorrect.',

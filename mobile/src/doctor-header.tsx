@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { api, authenticatedFileSource } from './api';
+import { api, authenticatedFileSource, publicDoctorPhotoSource } from './api';
 import { useSession } from './auth';
 import { colors } from './theme';
 
@@ -18,11 +18,16 @@ export function DoctorBrand() {
 export function DoctorHeaderActions() {
   const { profile } = useSession();
   const [imageFailed, setImageFailed] = useState(false);
+  const [usePrivatePhoto, setUsePrivatePhoto] = useState(false);
   const [unread, setUnread] = useState(0);
-  useEffect(() => setImageFailed(false), [profile?.profileImageUrl]);
+  useEffect(() => { setImageFailed(false); setUsePrivatePhoto(false); }, [profile?.profileImageUrl]);
   useEffect(() => { let active = true; api<NotificationPage>('/api/notifications?page=1&limit=1').then((data) => { if (active) setUnread(data.unreadCount); }).catch(() => {}); return () => { active = false; }; }, []);
   const initials = `${profile?.firstName?.[0] ?? ''}${profile?.lastName?.[0] ?? ''}`.toUpperCase() || 'AT';
-  return <View style={styles.actions}><Pressable accessibilityLabel="Open notifications" onPress={() => router.push('/(doctor)/notifications')} style={styles.bell} hitSlop={8}><Ionicons name="notifications-outline" color={colors.ink} size={21} />{unread ? <View style={styles.badge}><Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text></View> : null}</Pressable><Pressable accessibilityLabel="Open your profile" onPress={() => router.navigate('/(doctor)/profile')} style={styles.avatar} hitSlop={8}>{profile?.profileImageUrl && !imageFailed ? <Image source={authenticatedFileSource(profile.profileImageUrl)} style={styles.avatarImage} onError={() => setImageFailed(true)} /> : <Text style={styles.initials}>{initials}</Text>}</Pressable></View>;
+  const publicPhoto = Boolean(profile?.profileImageUrl && profile.verificationStatus === 'VERIFIED' && profile.isAcceptingBookings && !usePrivatePhoto);
+  const photoSource = publicPhoto
+    ? publicDoctorPhotoSource(profile?.id ?? '', profile?.profileImageUrl ?? null)
+    : profile?.profileImageUrl ? authenticatedFileSource(profile.profileImageUrl) : null;
+  return <View style={styles.actions}><Pressable accessibilityLabel="Open notifications" onPress={() => router.push('/(doctor)/notifications')} style={styles.bell} hitSlop={8}><Ionicons name="notifications-outline" color={colors.ink} size={21} />{unread ? <View style={styles.badge}><Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text></View> : null}</Pressable><Pressable accessibilityLabel="Open your profile" onPress={() => router.push('/(doctor)/profile')} style={styles.avatar} hitSlop={8}>{photoSource && !imageFailed ? <Image source={photoSource} style={styles.avatarImage} onError={() => { if (publicPhoto) setUsePrivatePhoto(true); else setImageFailed(true); }} /> : <Text style={styles.initials}>{initials}</Text>}</Pressable></View>;
 }
 
 const styles = StyleSheet.create({
