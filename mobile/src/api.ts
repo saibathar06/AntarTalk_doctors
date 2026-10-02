@@ -9,7 +9,8 @@ let refreshToken: string | null = null;
 let refreshFlight: Promise<void> | null = null;
 export class ApiError extends Error { constructor(public status: number, public code: string, message: string) { super(message); } }
 export const apiBaseUrl = () => baseUrl;
-export const authenticatedHeaders = () => accessToken ? { Authorization: `Bearer ${accessToken}`, 'X-Client-Surface': 'MOBILE' } : { 'X-Client-Surface': 'MOBILE' };
+export const authenticatedHeaders = (): Record<string, string> => accessToken ? { Authorization: `Bearer ${accessToken}`, 'X-Client-Surface': 'MOBILE' } : { 'X-Client-Surface': 'MOBILE' };
+export const authenticatedFileSource = (path: string) => ({ uri: endpoint(path), headers: authenticatedHeaders() });
 
 const publicErrorMessages: Record<string, string> = {
   INVALID_CREDENTIALS: 'The email or password is incorrect.',

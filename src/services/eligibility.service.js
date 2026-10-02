@@ -13,6 +13,7 @@ export function profileCompletion(profile) {
     languages: Boolean(profile.languages?.length),
     preferredSessionLanguage: Boolean(profile.preferredSessionLanguage?.trim()),
     expertise: Boolean(profile.expertise?.length),
+    credentialDocument: profile.professionalStatus !== 'LICENSED_PROFESSIONAL' || profile.verificationStatus === 'VERIFIED' || Boolean(profile.licenseDocumentUrl),
     consultationFee: Number(profile.consultationFee) > 0
   };
   const missingFields = Object.keys(fields).filter((key) => !fields[key]);

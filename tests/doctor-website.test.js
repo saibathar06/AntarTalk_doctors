@@ -32,6 +32,10 @@ describe('server-derived profile and eligibility', () => {
     const student = { ...doctor, professionalStatus: 'FINAL_YEAR_STUDENT', licenseNumber: null, university: 'University', course: 'Psychology', enrollmentNumber: 'A1', expectedGraduationDate: new Date() };
     expect(profileCompletion(student).profileCompleted).toBe(true);
   });
+  it('requires a credential document before a licensed pending profile can be submitted', () => {
+    const pendingWithoutDocument = { ...doctor, verificationStatus: 'PENDING', licenseDocumentUrl: null };
+    expect(profileCompletion(pendingWithoutDocument).missingFields).toContain('credentialDocument');
+  });
   it.each(['profileCompleted', 'completionPercentage', 'canTakeSessions', 'profileImageUrl', 'licenseDocumentUrl'])('rejects client-controlled %s', (field) => expect(updateProfileSchema.safeParse({ body: { [field]: true } }).success).toBe(false));
   it.each([{ experienceYears: -1 }, { experienceYears: 1.5 }, { graduationYear: 1800 }, { consultationFee: -5 }, { languages: [''] }])('validates profile input %j', (body) => expect(updateProfileSchema.safeParse({ body }).success).toBe(false));
   it('does not treat verified doctors’ personal edits as credential changes', () => {
