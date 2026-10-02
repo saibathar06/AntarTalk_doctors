@@ -102,6 +102,28 @@ export function ProfilePage() {
       setBusyLabel("");
     }
   }
+  async function uploadStamp(file: File | undefined) {
+    if (!file) return;
+    setBusy(true);
+    setBusyLabel("Securing your prescription signature…");
+    setError("");
+    setNotice("");
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      await api("/api/doctor/profile/stamp-signature", {
+        method: "POST",
+        body,
+      });
+      await reload();
+      setNotice("Your prescription signature or stamp was saved securely.");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+      setBusyLabel("");
+    }
+  }
   async function download() {
     try {
       const url = await fileUrl(p!.licenseDocumentUrl!);
@@ -364,6 +386,34 @@ export function ProfilePage() {
           authorized backend administrators.
         </p>
       </section>
+      {verified && p!.professionalCategory === "PSYCHIATRIST" && (
+        <section className="card">
+          <h2>Prescription signature or stamp</h2>
+          <p>
+            Stored privately and applied by the backend only to prescriptions
+            you issue after a completed session.
+          </p>
+          <label className="file-label">
+            {p!.hasStampSignature ? "Replace signature or stamp" : "Upload signature or stamp"}
+            <input
+              disabled={busy}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(event) => {
+                void uploadStamp(event.target.files?.[0]);
+                event.target.value = "";
+              }}
+            />
+          </label>
+          <p className="help">
+            JPEG, PNG or WebP · up to 5 MB. The image is normalized and stored
+            separately from public profile media.
+          </p>
+          {p!.hasStampSignature && (
+            <p className="alert" role="status">Signature or stamp is ready for prescriptions.</p>
+          )}
+        </section>
+      )}
       {!verified && <section className="card profile-actions">
         <div>
           <p className="eyebrow">FINAL STEP</p>

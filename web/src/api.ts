@@ -3,9 +3,35 @@ import { responseError } from "./httpError";
 export { ApiError } from "./requestError";
 let accessToken: string | null = null;
 let refreshPromise: Promise<void> | null = null;
+
+const configuredApiOrigin = String(
+  import.meta.env.VITE_DOCTOR_API_ORIGIN ?? "",
+).trim();
+
+function apiEndpoint(path: string): string {
+  if (!configuredApiOrigin) return path;
+  const origin = new URL(configuredApiOrigin);
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(
+    origin.hostname,
+  );
+  if (
+    origin.username ||
+    origin.password ||
+    origin.pathname !== "/" ||
+    origin.search ||
+    origin.hash ||
+    (origin.protocol !== "https:" && !(origin.protocol === "http:" && loopback))
+  ) {
+    throw new Error(
+      "VITE_DOCTOR_API_ORIGIN must be an HTTPS origin (or loopback HTTP origin) without credentials or a path.",
+    );
+  }
+  return new URL(path, origin).toString();
+}
+
 async function fetchApi(path: string, options: RequestInit): Promise<Response> {
   try {
-    return await fetch(path, {
+    return await fetch(apiEndpoint(path), {
       ...options,
       signal: options.signal ?? AbortSignal.timeout(125000),
     });
@@ -26,7 +52,7 @@ export async function refreshSession() {
   const rotate = async () => {
     const response = await fetchApi("/api/doctor/auth/refresh", {
       method: "POST",
-      credentials: "same-origin",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: "{}",
     });
@@ -60,7 +86,7 @@ async function request(
   const response = await fetchApi(path, {
     ...options,
     headers,
-    credentials: "same-origin",
+    credentials: "include",
   });
   if (response.status === 401 && retry && !path.includes("/auth/")) {
     try {
@@ -97,7 +123,7 @@ export async function apiWithAccessToken<T>(
   const response = await fetchApi(path, {
     ...options,
     headers,
-    credentials: "same-origin",
+    credentials: "include",
   });
   if (!response.ok) throw await responseError(response);
   return (await response.json()).data;

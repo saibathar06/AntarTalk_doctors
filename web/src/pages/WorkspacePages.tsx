@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import {
   CalendarCheckIcon,
@@ -6,7 +6,10 @@ import {
   CalendarDotsIcon,
   ArrowRightIcon,
   WalletIcon,
+  FileTextIcon,
+  DownloadSimpleIcon,
 } from "@phosphor-icons/react";
+import { api, fileUrl } from "../api";
 import { useAuth } from "../auth";
 import { PayoutPanel } from "./PayoutPanel";
 import {
@@ -24,6 +27,7 @@ import type {
   Appointment,
   Balance,
   Client,
+  ClientSessionHistory,
   Dashboard,
   Earning,
   Page,
@@ -221,6 +225,7 @@ export function AppointmentsPage() {
 export function ClientsPage() {
   const { profile } = useAuth();
   const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState<Client | null>(null);
   const resource = useResource<Page<Client>>(
     `/api/doctor/clients?page=${page}`,
   );
@@ -231,7 +236,8 @@ export function ClientsPage() {
           description="Each distinct client who has booked an appointment with you appears here."
         />
       <p className="alert">
-        This is a booking-based practice list, not a clinical records area. For privacy, clients are identified by practice-specific references and no name, contact, or clinical information is shown.
+        Only clients who booked with your practice are listed. Contact details
+        are never exposed here; select a client to review their past sessions.
       </p>
       <ErrorState message={resource.error} />
       {resource.loading ? (
@@ -242,7 +248,12 @@ export function ClientsPage() {
             {resource.data.items.length ? (
               <div className="client-grid">
                 {resource.data.items.map((client) => (
-                  <article className="client-card" key={client.label}>
+                  <button
+                    type="button"
+                    className="client-card client-card-button"
+                    key={client.clientId}
+                    onClick={() => setSelected(client)}
+                  >
                     <span className="client-avatar">
                       <UsersIcon size={24} />
                     </span>
@@ -255,7 +266,8 @@ export function ClientsPage() {
                         profile!.timezone,
                       )}
                     </small>
-                  </article>
+                    <span className="client-card-action">View session history</span>
+                  </button>
                 ))}
               </div>
             ) : (
@@ -267,7 +279,161 @@ export function ClientsPage() {
           </section>
         )
       )}
+      {selected && (
+        <ClientHistory
+          client={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </>
+  );
+}
+
+function ClientHistory({
+  client,
+  onClose,
+}: {
+  client: Client;
+  onClose: () => void;
+}) {
+  const { profile } = useAuth();
+  const [page, setPage] = useState(1);
+  const [busyId, setBusyId] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const history = useResource<ClientSessionHistory>(
+    `/api/doctor/clients/${client.clientId}/sessions?page=${page}`,
+  );
+
+  async function issuePrescription(
+    event: FormEvent<HTMLFormElement>,
+    bookingId: string,
+  ) {
+    event.preventDefault();
+    setBusyId(bookingId);
+    setError("");
+    setNotice("");
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form));
+    try {
+      await api(`/api/doctor/sessions/${bookingId}/prescription`, {
+        method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: JSON.stringify({
+          medicines: values.medicines,
+          instructions: String(values.instructions || "").trim() || null,
+        }),
+      });
+      form.reset();
+      setNotice("Prescription created and queued for secure email delivery to the client.");
+      history.reload();
+    } catch (caught) {
+      setError((caught as Error).message);
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function downloadPrescription(id: string) {
+    setBusyId(id);
+    setError("");
+    try {
+      const url = await fileUrl(`/api/doctor/prescriptions/${id}/pdf`);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `antartalk-prescription-${id}.pdf`;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (caught) {
+      setError((caught as Error).message);
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  return (
+    <section className="card client-history">
+      <div className="section-title">
+        <div>
+          <p className="eyebrow">CLIENT SESSION HISTORY</p>
+          <h2>{history.data?.client.name ?? client.label}</h2>
+          <p>Past appointments and prescriptions issued by your practice.</p>
+        </div>
+        <button type="button" className="button secondary small" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      <ErrorState message={error || history.error} />
+      {notice && <p className="alert" role="status">{notice}</p>}
+      {history.loading ? (
+        <LoadingState label="Loading client sessions…" />
+      ) : history.data?.items.length ? (
+        <>
+          <div className="client-session-list">
+            {history.data.items.map((session) => (
+              <article className="client-session" key={session.id}>
+                <div className="client-session-heading">
+                  <div>
+                    <strong>{formatDate(session.startTime, profile!.timezone)}</strong>
+                    <small>
+                      {new Intl.DateTimeFormat("en-IN", {
+                        timeZone: profile!.timezone,
+                        hour: "numeric",
+                        minute: "2-digit",
+                      }).format(new Date(session.startTime))} · up to {session.sessionDurationMinutes} minutes
+                    </small>
+                  </div>
+                  <span className={`badge ${session.status.toLowerCase()}`}>
+                    {session.status.replaceAll("_", " ")}
+                  </span>
+                </div>
+                {session.prescription ? (
+                  <div className="prescription-summary">
+                    <FileTextIcon size={22} />
+                    <div>
+                      <strong>Prescription issued</strong>
+                      <p>{session.prescription.medicines}</p>
+                      {session.prescription.instructions && (
+                        <small>{session.prescription.instructions}</small>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="button secondary small"
+                      disabled={busyId === session.prescription.id}
+                      onClick={() => void downloadPrescription(session.prescription!.id)}
+                    >
+                      <DownloadSimpleIcon /> Download PDF
+                    </button>
+                  </div>
+                ) : profile!.professionalCategory === "PSYCHIATRIST" &&
+                  session.status === "COMPLETED" ? (
+                  <details className="prescription-form">
+                    <summary>Issue prescription</summary>
+                    <form onSubmit={(event) => void issuePrescription(event, session.id)}>
+                      <label>
+                        Prescribed medicines
+                        <textarea name="medicines" rows={5} minLength={2} maxLength={6000} required />
+                      </label>
+                      <label>
+                        Instructions (optional)
+                        <textarea name="instructions" rows={3} maxLength={4000} />
+                      </label>
+                      <button className="button small" disabled={busyId === session.id}>
+                        {busyId === session.id ? "Issuing…" : "Create and email prescription"}
+                      </button>
+                    </form>
+                  </details>
+                ) : null}
+              </article>
+            ))}
+          </div>
+          <Pager pagination={history.data.pagination} onPage={setPage} />
+        </>
+      ) : (
+        <EmptyState title="No past sessions yet" />
+      )}
+    </section>
   );
 }
 function VerifiedEarnings() {
@@ -304,7 +470,7 @@ function VerifiedEarnings() {
       <section className="card">
         <div className="section-title">
           <h2>Earnings ledger</h2>
-          <p>Earnings are credited only after you mark a finished session complete. Cancellation adjustments are shown separately.</p>
+          <p>Earnings are credited automatically only after verified video attendance completes a session. Cancellation adjustments are shown separately.</p>
         </div>
         {transactions.loading ? (
           <LoadingState />

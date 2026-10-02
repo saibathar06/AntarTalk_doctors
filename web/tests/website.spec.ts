@@ -198,6 +198,26 @@ test("default timing applies to seven days and permits a custom daily override",
       : [];
     return route.fulfill({ json: { success: true, data: rows } });
   });
+  await page.route("**/api/doctor/availability/slots?*", async (route) => {
+    const start = DateTime.now()
+      .setZone("Asia/Kolkata")
+      .startOf("day")
+      .plus({ hours: 10 });
+    return route.fulfill({
+      json: {
+        success: true,
+        data: timing
+          ? [{
+              doctorId: profile.id,
+              startTime: start.toUTC().toISO(),
+              endTime: start.plus({ hours: 1 }).toUTC().toISO(),
+              sessionDurationMinutes: 40,
+              bufferDurationMinutes: 20,
+            }]
+          : [],
+      },
+    });
+  });
   await page.goto("/doctor/availability");
   await expect(page.getByLabel("Favorite name")).toHaveCount(0);
   await expect(
@@ -286,7 +306,9 @@ test("generated slots stay inside their day card and can be blocked or unblocked
 
   await page.goto("/doctor/availability");
   const dayName = date.toFormat("cccc");
-  const row = page.locator(".day-row").nth(1);
+  const row = page.locator(".day-row").filter({
+    has: page.getByText(dayName, { exact: true }),
+  });
   await expect(row.getByText("Generated appointment times")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Time away" })).toHaveCount(0);
   page.once("dialog", (dialog) => dialog.accept());

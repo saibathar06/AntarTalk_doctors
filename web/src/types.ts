@@ -26,6 +26,7 @@ export interface Profile {
   consultationFee: string | null;
   profileImageUrl: string | null;
   licenseDocumentUrl: string | null;
+  hasStampSignature: boolean;
   profileCompleted: boolean;
   completionPercentage: number;
   missingFields: string[];
@@ -123,9 +124,28 @@ export interface Block {
   reason: string | null;
 }
 export interface Client {
+  clientId: string;
   label: string;
   appointmentCount: number;
   latestAppointmentAt: string;
+}
+export interface PrescriptionSummary {
+  id: string;
+  medicines: string;
+  instructions: string | null;
+  prescribedAt: string;
+}
+export interface ClientSessionHistory {
+  client: { name: string };
+  items: Array<{
+    id: string;
+    startTime: string;
+    endTime: string;
+    sessionDurationMinutes: number;
+    status: string;
+    prescription: PrescriptionSummary | null;
+  }>;
+  pagination: Pagination;
 }
 export interface Balance {
   currency: string;

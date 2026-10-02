@@ -1236,6 +1236,25 @@ progress::-moz-progress-bar {
   border-radius: 12px;
   padding: 22px;
 }
+.client-card-button {
+  width: 100%;
+  color: inherit;
+  background: #fff;
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.client-card-button:hover {
+  border-color: #9fded8;
+  box-shadow: 0 8px 24px rgba(23, 32, 51, 0.07);
+  transform: translateY(-1px);
+}
+.client-card-action {
+  display: block;
+  margin-top: 14px;
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 700;
+}
 .client-card h2 {
   font-size: 15px;
   margin: 15px 0 5px;
@@ -1243,6 +1262,62 @@ progress::-moz-progress-bar {
 .client-card p {
   font-size: 12px;
   margin-bottom: 5px;
+}
+.client-history {
+  margin-top: 22px;
+}
+.client-session-list {
+  display: grid;
+  gap: 14px;
+}
+.client-session {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.client-session-heading,
+.prescription-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.client-session-heading small,
+.prescription-summary small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+}
+.prescription-summary {
+  align-items: center;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #f2fbf8;
+}
+.prescription-summary > div {
+  flex: 1;
+}
+.prescription-summary p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}
+.prescription-form {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fff7fa;
+}
+.prescription-form summary {
+  color: var(--pink);
+  font-weight: 700;
+  cursor: pointer;
+}
+.prescription-form form {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
 }
 .photo-section {
   display: flex;

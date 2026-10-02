@@ -52,11 +52,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return reload();
   }
   async function logout(all = false) {
-    await refreshSession();
-    await mutate("/api/doctor/auth/logout", "POST", { allDevices: all });
-    setAccessToken(null);
-    setProfile(null);
-    setViewer(null);
+    try {
+      await refreshSession();
+      await mutate("/api/doctor/auth/logout", "POST", { allDevices: all });
+    } finally {
+      setAccessToken(null);
+      setProfile(null);
+      setViewer(null);
+      setChallenge(null);
+    }
   }
   useEffect(() => {
     refreshSession()

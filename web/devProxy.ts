@@ -42,10 +42,12 @@ export function isLocalRequest(
 
 export function localCookie(cookie: string): string {
   // Only the doctor refresh cookie is adapted for the HTTP loopback development server.
-  // HttpOnly, SameSite=Strict, expiry and Path are retained. Production is untouched.
+  // HttpOnly, expiry and Path are retained. Production is untouched. A production
+  // cross-site cookie uses SameSite=None + Secure; loopback HTTP requires Lax.
   if (!cookie.startsWith("antartalk_doctor_refresh=")) return cookie;
   return cookie
     .replace(/;\s*Secure(?=;|$)/gi, "")
+    .replace(/;\s*SameSite=None/gi, "; SameSite=Lax")
     .replace(/;\s*Domain=[^;]*/gi, "");
 }
 
@@ -124,11 +126,6 @@ export function doctorProxy(target: URL): ProxyOptions {
             },
           }),
         );
-      });
-      proxy.on("proxyReq", (outgoing, incoming) => {
-        // The preceding guard validates the real browser origin before translation.
-        if (incoming.headers.origin)
-          outgoing.setHeader("Origin", target.origin);
       });
       proxy.on("proxyRes", (response) => {
         response.headers["x-antartalk-gateway"] = "upstream-response";

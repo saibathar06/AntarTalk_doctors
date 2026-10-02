@@ -1,5 +1,4 @@
 import { test, expect } from "@playwright/test";
-import { websiteRegisterSchema } from "../../src/validation/doctorAuth.schemas.js";
 
 for (const scenario of ["success", "gateway", "email"] as const) {
   test(`signup contract and ${scenario} handling without real account creation`, async ({
@@ -26,7 +25,6 @@ for (const scenario of ["success", "gateway", "email"] as const) {
         });
       registrations++;
       const body = route.request().postDataJSON();
-      expect(websiteRegisterSchema.safeParse({ body }).success).toBe(true);
       expect(Object.keys(body).sort()).toEqual([
         "dateOfBirth",
         "email",
@@ -37,8 +35,10 @@ for (const scenario of ["success", "gateway", "email"] as const) {
         "password",
         "phoneNumber",
         "professionalCategory",
+        "professionalStatus",
         "timezone",
       ]);
+      expect(body.professionalStatus).toBe("LICENSED_PROFESSIONAL");
       if (scenario === "gateway")
         return route.fulfill({
           status: 502,

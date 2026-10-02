@@ -5,7 +5,7 @@ import { apiTarget, doctorProxy, localApiGuard } from "./devProxy.ts";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "DOCTOR_");
   const target = apiTarget(
-    env.DOCTOR_API_TARGET || "https://antartalk-doctors.onrender.com",
+    env.DOCTOR_API_TARGET || "https://antartalk-unified-backend.onrender.com",
   );
   return {
     plugins: [react(), localApiGuard()],

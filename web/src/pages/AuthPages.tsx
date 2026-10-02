@@ -83,6 +83,7 @@ function AuthShell({
 }
 
 type AuthMode = "login" | "register" | "verify" | "forgot" | "reset";
+type ProfessionalStatus = "LICENSED_PROFESSIONAL" | "FINAL_YEAR_STUDENT";
 export function AuthPage({ mode }: { mode: AuthMode }) {
   const navigate = useNavigate(),
     location = useLocation(),
@@ -93,6 +94,8 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     [notice, setNotice] = useState(""),
     [cooldown, setCooldown] = useState(0),
     [countryCode, setCountryCode] = useState("+91"),
+    [professionalStatus, setProfessionalStatus] =
+      useState<ProfessionalStatus>("LICENSED_PROFESSIONAL"),
     [busyLabel, setBusyLabel] = useState("");
   useEffect(() => {
     setError("");
@@ -143,7 +146,10 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
             ? (() => {
                 const registration = Object.fromEntries(
                   Object.entries(values).filter(
-                    ([key]) => key !== "countryCode" && key !== "localPhoneNumber",
+                    ([key, value]) =>
+                      key !== "countryCode" &&
+                      key !== "localPhoneNumber" &&
+                      String(value).trim() !== "",
                   ),
                 );
                 return {
@@ -214,7 +220,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
           : mode === "verify"
             ? "Enter the six-digit email code to finish signing in. Resending reports whether a new email was sent."
             : mode === "forgot"
-              ? "Enter your account email and complete the security check to receive a reset code."
+              ? "Enter your account email to receive a time-limited reset code."
               : mode === "reset"
                 ? "Enter the reset code from your email, then choose a strong new password."
             : "Enter your email and password. Next, verify the code sent to your email."
@@ -347,25 +353,78 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
               <div className="form-grid">
                 <label>
                   Professional category
-                  <select name="professionalCategory">
+                  <select name="professionalCategory" required>
                     <option value="PSYCHOLOGIST">Psychologist</option>
                     <option value="PSYCHIATRIST">Psychiatrist</option>
                     <option value="COUNSELLOR">Counsellor</option>
                   </select>
                 </label>
+                <label>
+                  Professional status
+                  <select
+                    name="professionalStatus"
+                    value={professionalStatus}
+                    onChange={(event) =>
+                      setProfessionalStatus(
+                        event.target.value as ProfessionalStatus,
+                      )
+                    }
+                    required
+                  >
+                    <option value="LICENSED_PROFESSIONAL">
+                      Licensed professional
+                    </option>
+                    <option value="FINAL_YEAR_STUDENT">
+                      Eligible final-year student
+                    </option>
+                  </select>
+                </label>
               </div>
-              <label>
-                License / registration number
-                <input
-                  name="licenseNumber"
-                  required
-                  minLength={2}
-                  maxLength={100}
-                />
-              </label>
+              {professionalStatus === "LICENSED_PROFESSIONAL" ? (
+                <div className="form-grid">
+                  <label>
+                    License / registration number
+                    <input
+                      name="licenseNumber"
+                      required
+                      minLength={2}
+                      maxLength={100}
+                    />
+                  </label>
+                  <label>
+                    Licensing authority (optional)
+                    <input name="licenseAuthority" minLength={2} maxLength={160} />
+                  </label>
+                </div>
+              ) : (
+                <>
+                  <div className="form-grid">
+                    <label>
+                      University
+                      <input name="university" required minLength={2} maxLength={200} />
+                    </label>
+                    <label>
+                      Course
+                      <input name="course" required minLength={2} maxLength={200} />
+                    </label>
+                    <label>
+                      Specialization (optional)
+                      <input name="specialization" maxLength={200} />
+                    </label>
+                    <label>
+                      Expected graduation date
+                      <input name="expectedGraduationDate" type="date" required />
+                    </label>
+                    <label>
+                      Enrollment number
+                      <input name="enrollmentNumber" required minLength={2} maxLength={100} />
+                    </label>
+                  </div>
+                </>
+              )}
               <p className="help">
-                For licensed professionals. Account registration does not grant
-                professional approval.
+                Registration creates a pending account. AntarTalk verifies professional
+                credentials separately before any sessions can be accepted.
               </p>
             </>
           )}
